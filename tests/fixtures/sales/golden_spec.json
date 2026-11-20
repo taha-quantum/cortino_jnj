@@ -1,0 +1,428 @@
+{
+  "spec_version": "0.1",
+  "name": "Sales",
+  "source_format": "pbip_tmdl",
+  "sources": [
+    {
+      "id": "Sales",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Sales",
+      "query": null
+    },
+    {
+      "id": "Customer",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Customers",
+      "query": null
+    },
+    {
+      "id": "Product",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Products",
+      "query": null
+    },
+    {
+      "id": "Date",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Dates",
+      "query": null
+    }
+  ],
+  "tables": [
+    {
+      "name": "Sales",
+      "source_id": "Sales",
+      "columns": [
+        {
+          "name": "order_id",
+          "data_type": "int64",
+          "source_column": "order_id"
+        },
+        {
+          "name": "order_date",
+          "data_type": "dateTime",
+          "source_column": "order_date"
+        },
+        {
+          "name": "customer_id",
+          "data_type": "int64",
+          "source_column": "customer_id"
+        },
+        {
+          "name": "product_id",
+          "data_type": "int64",
+          "source_column": "product_id"
+        },
+        {
+          "name": "quantity",
+          "data_type": "int64",
+          "source_column": "quantity"
+        },
+        {
+          "name": "amount",
+          "data_type": "decimal",
+          "source_column": "amount"
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "source_id": "Customer",
+      "columns": [
+        {
+          "name": "customer_id",
+          "data_type": "int64",
+          "source_column": "customer_id"
+        },
+        {
+          "name": "name",
+          "data_type": "string",
+          "source_column": "name"
+        },
+        {
+          "name": "region",
+          "data_type": "string",
+          "source_column": "region"
+        }
+      ]
+    },
+    {
+      "name": "Product",
+      "source_id": "Product",
+      "columns": [
+        {
+          "name": "product_id",
+          "data_type": "int64",
+          "source_column": "product_id"
+        },
+        {
+          "name": "name",
+          "data_type": "string",
+          "source_column": "name"
+        },
+        {
+          "name": "category",
+          "data_type": "string",
+          "source_column": "category"
+        }
+      ]
+    },
+    {
+      "name": "Date",
+      "source_id": "Date",
+      "columns": [
+        {
+          "name": "date",
+          "data_type": "dateTime",
+          "source_column": "date"
+        },
+        {
+          "name": "year",
+          "data_type": "int64",
+          "source_column": "year"
+        },
+        {
+          "name": "month",
+          "data_type": "int64",
+          "source_column": "month"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "Sales",
+      "from_column": "customer_id",
+      "to_table": "Customer",
+      "to_column": "customer_id",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    },
+    {
+      "from_table": "Sales",
+      "from_column": "product_id",
+      "to_table": "Product",
+      "to_column": "product_id",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    },
+    {
+      "from_table": "Sales",
+      "from_column": "order_date",
+      "to_table": "Date",
+      "to_column": "date",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    }
+  ],
+  "measures": [
+    {
+      "name": "Total Sales",
+      "table": "Sales",
+      "expression": "SUM(Sales[amount])",
+      "language": "dax",
+      "depends_on": []
+    },
+    {
+      "name": "Order Count",
+      "table": "Sales",
+      "expression": "DISTINCTCOUNT(Sales[order_id])",
+      "language": "dax",
+      "depends_on": []
+    },
+    {
+      "name": "Avg Order",
+      "table": "Sales",
+      "expression": "DIVIDE(\n    [Total Sales],\n    [Order Count]\n)",
+      "language": "dax",
+      "depends_on": [
+        "Total Sales",
+        "Order Count"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "overview",
+      "name": "Overview",
+      "visuals": [
+        {
+          "id": "barSalesByRegion",
+          "page": "overview",
+          "type": "bar",
+          "original_type": "clusteredBarChart",
+          "position": {
+            "x": 20.0,
+            "y": 160.0,
+            "w": 610.0,
+            "h": 260.0
+          },
+          "encodings": [
+            {
+              "role": "x",
+              "field": {
+                "table": "Customer",
+                "name": "region",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "y",
+              "field": {
+                "table": "Sales",
+                "name": "Total Sales",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "cardTotalSales",
+          "page": "overview",
+          "type": "card",
+          "original_type": "card",
+          "position": {
+            "x": 20.0,
+            "y": 20.0,
+            "w": 300.0,
+            "h": 120.0
+          },
+          "encodings": [
+            {
+              "role": "values",
+              "field": {
+                "table": "Sales",
+                "name": "Total Sales",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "customXyz",
+          "page": "overview",
+          "type": "unknown",
+          "original_type": "customVisualXYZ",
+          "position": {
+            "x": 660.0,
+            "y": 20.0,
+            "w": 600.0,
+            "h": 120.0
+          },
+          "encodings": [],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "lineSalesByMonth",
+          "page": "overview",
+          "type": "line",
+          "original_type": "lineChart",
+          "position": {
+            "x": 650.0,
+            "y": 160.0,
+            "w": 610.0,
+            "h": 260.0
+          },
+          "encodings": [
+            {
+              "role": "x",
+              "field": {
+                "table": "Date",
+                "name": "month",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "y",
+              "field": {
+                "table": "Sales",
+                "name": "Total Sales",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "slicerRegion",
+          "page": "overview",
+          "type": "slicer",
+          "original_type": "slicer",
+          "position": {
+            "x": 340.0,
+            "y": 20.0,
+            "w": 300.0,
+            "h": 120.0
+          },
+          "encodings": [
+            {
+              "role": "values",
+              "field": {
+                "table": "Customer",
+                "name": "region",
+                "kind": "column",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "tableByCategory",
+          "page": "overview",
+          "type": "table",
+          "original_type": "tableEx",
+          "position": {
+            "x": 20.0,
+            "y": 440.0,
+            "w": 1240.0,
+            "h": 260.0
+          },
+          "encodings": [
+            {
+              "role": "values",
+              "field": {
+                "table": "Product",
+                "name": "category",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "values",
+              "field": {
+                "table": "Sales",
+                "name": "Total Sales",
+                "kind": "measure",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "values",
+              "field": {
+                "table": "Sales",
+                "name": "Order Count",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        }
+      ],
+      "filters": [
+        {
+          "level": "page",
+          "field": {
+            "table": "Customer",
+            "name": "region",
+            "kind": "column",
+            "aggregation": null
+          },
+          "operator": "in",
+          "values": [],
+          "is_slicer": true
+        }
+      ]
+    }
+  ],
+  "filters": [],
+  "parameters": [],
+  "rls_roles": [
+    {
+      "name": "RegionManager",
+      "table": "Customer",
+      "filter_expression": "Customer[region] = \"West\""
+    }
+  ],
+  "unknowns": [
+    {
+      "where": "visual:customXyz",
+      "what": "custom visual customVisualXYZ",
+      "raw": "{\n  \"$schema\": \"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json\",\n  \"name\": \"customXyz\",\n  \"position\": {\n    \"x\": 660,\n    \"y\": 20,\n    \"z\": 2000,\n    \"height\": 120,\n    \"width\": 600,\n    \"tabOrder\": 2000\n  },\n  \"visual\": {\n    \"visualType\": \"customVisualXYZ\",\n    \"query\": {\n      \"queryState\": {\n        \"Category\": {\n          \"projections\": [\n            {\n              \"field\": {\n                \"Column\": {\n                  \"Expression\": {\n                    \"SourceRef\": {\n                      \"Entity\": \"Product\"\n                    }\n                  },\n                  \"Property\": \"category\"\n                }\n              },\n              \"queryRef\": \"Product.category\",\n              \"nativeQueryRef\": \"category\",\n              \"active\": true\n            }\n          ]\n        },\n        \"Values\": {\n          \"projections\": [\n            {\n              \"field\": {\n                \"Aggregation\": {\n                  \"Expression\": {\n                    \"Column\": {\n                      \"Expression\": {\n                        \"SourceRef\": {\n                          \"Entity\": \"Sales\"\n                        }\n                      },\n                      \"Property\": \"quantity\"\n                    }\n                  },\n                  \"Function\": 0\n                }\n              },\n              \"queryRef\": \"Sum(Sales.quantity)\",\n              \"nativeQueryRef\": \"Sum of quantity\"\n            }\n          ]\n        }\n      }\n    },\n    \"drillFilterOtherVisuals\": true\n  }\n}\n"
+    }
+  ]
+}

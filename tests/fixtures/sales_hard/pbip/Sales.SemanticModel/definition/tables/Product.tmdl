@@ -1,0 +1,40 @@
+table Product
+	lineageTag: 65232203-dc6e-427c-bd3a-b5254c49143d
+
+	column product_id
+		dataType: int64
+		isKey
+		formatString: 0
+		lineageTag: e9d18505-8143-4081-a162-6c05f962a5a3
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column name
+		dataType: string
+		lineageTag: 24113915-c7d8-4cdf-80f8-a3b930af8440
+		summarizeBy: none
+		sourceColumn: name
+
+		annotation SummarizationSetBy = Automatic
+
+	column category
+		dataType: string
+		lineageTag: 46bab285-ddd8-4715-b6ea-bf506cf69f5e
+		summarizeBy: none
+		sourceColumn: category
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Product = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("server01", "salesdb"),
+				    dbo_Products = Source{[Schema="dbo",Item="Products"]}[Data]
+				in
+				    dbo_Products
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,9 @@
+.superpowers/
+runs/
+.env
+.venv/
+__pycache__/
+.claude/
+
+CLAUDE.md
+docs/superpowers/

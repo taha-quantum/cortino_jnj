@@ -1,0 +1,389 @@
+{
+  "spec_version": "0.1",
+  "name": "Sales Hard",
+  "source_format": "pbip_tmdl",
+  "sources": [
+    {
+      "id": "Sales",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Sales",
+      "query": null
+    },
+    {
+      "id": "Customer",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Customers",
+      "query": null
+    },
+    {
+      "id": "Product",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Products",
+      "query": null
+    },
+    {
+      "id": "Date",
+      "kind": "sqlserver",
+      "server": "server01",
+      "database": "salesdb",
+      "schema": "dbo",
+      "table": "Dates",
+      "query": null
+    }
+  ],
+  "tables": [
+    {
+      "name": "Sales",
+      "source_id": "Sales",
+      "columns": [
+        {
+          "name": "order_id",
+          "data_type": "int64",
+          "source_column": "order_id"
+        },
+        {
+          "name": "order_date",
+          "data_type": "dateTime",
+          "source_column": "order_date"
+        },
+        {
+          "name": "customer_id",
+          "data_type": "int64",
+          "source_column": "customer_id"
+        },
+        {
+          "name": "product_id",
+          "data_type": "int64",
+          "source_column": "product_id"
+        },
+        {
+          "name": "quantity",
+          "data_type": "int64",
+          "source_column": "quantity"
+        },
+        {
+          "name": "amount",
+          "data_type": "decimal",
+          "source_column": "amount"
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "source_id": "Customer",
+      "columns": [
+        {
+          "name": "customer_id",
+          "data_type": "int64",
+          "source_column": "customer_id"
+        },
+        {
+          "name": "name",
+          "data_type": "string",
+          "source_column": "name"
+        },
+        {
+          "name": "region",
+          "data_type": "string",
+          "source_column": "region"
+        }
+      ]
+    },
+    {
+      "name": "Product",
+      "source_id": "Product",
+      "columns": [
+        {
+          "name": "product_id",
+          "data_type": "int64",
+          "source_column": "product_id"
+        },
+        {
+          "name": "name",
+          "data_type": "string",
+          "source_column": "name"
+        },
+        {
+          "name": "category",
+          "data_type": "string",
+          "source_column": "category"
+        }
+      ]
+    },
+    {
+      "name": "Date",
+      "source_id": "Date",
+      "columns": [
+        {
+          "name": "date",
+          "data_type": "dateTime",
+          "source_column": "date"
+        },
+        {
+          "name": "year",
+          "data_type": "int64",
+          "source_column": "year"
+        },
+        {
+          "name": "month",
+          "data_type": "int64",
+          "source_column": "month"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "Sales",
+      "from_column": "customer_id",
+      "to_table": "Customer",
+      "to_column": "customer_id",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    },
+    {
+      "from_table": "Sales",
+      "from_column": "product_id",
+      "to_table": "Product",
+      "to_column": "product_id",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    },
+    {
+      "from_table": "Sales",
+      "from_column": "order_date",
+      "to_table": "Date",
+      "to_column": "date",
+      "cardinality": "many_to_one",
+      "cross_filter": "single"
+    }
+  ],
+  "measures": [
+    {
+      "name": "Total Sales",
+      "table": "Sales",
+      "expression": "SUM(Sales[amount])",
+      "language": "dax",
+      "depends_on": []
+    },
+    {
+      "name": "Sales YTD",
+      "table": "Sales",
+      "expression": "TOTALYTD([Total Sales], 'Date'[date])",
+      "language": "dax",
+      "depends_on": [
+        "Total Sales"
+      ]
+    },
+    {
+      "name": "Sales LY",
+      "table": "Sales",
+      "expression": "CALCULATE(\n    [Total Sales],\n    SAMEPERIODLASTYEAR('Date'[date])\n)",
+      "language": "dax",
+      "depends_on": [
+        "Total Sales"
+      ]
+    },
+    {
+      "name": "% of Total",
+      "table": "Sales",
+      "expression": "DIVIDE(\n    [Total Sales],\n    CALCULATE([Total Sales], ALL(Customer))\n)",
+      "language": "dax",
+      "depends_on": [
+        "Total Sales"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "overview",
+      "name": "Overview",
+      "visuals": [
+        {
+          "id": "barShareByRegion",
+          "page": "overview",
+          "type": "bar",
+          "original_type": "clusteredBarChart",
+          "position": {
+            "x": 440.0,
+            "y": 20.0,
+            "w": 820.0,
+            "h": 260.0
+          },
+          "encodings": [
+            {
+              "role": "x",
+              "field": {
+                "table": "Customer",
+                "name": "region",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "y",
+              "field": {
+                "table": "Sales",
+                "name": "% of Total",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "lineSalesLy",
+          "page": "overview",
+          "type": "line",
+          "original_type": "lineChart",
+          "position": {
+            "x": 650.0,
+            "y": 300.0,
+            "w": 610.0,
+            "h": 400.0
+          },
+          "encodings": [
+            {
+              "role": "x",
+              "field": {
+                "table": "Date",
+                "name": "month",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "series",
+              "field": {
+                "table": "Date",
+                "name": "year",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "y",
+              "field": {
+                "table": "Sales",
+                "name": "Sales LY",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "lineSalesYtd",
+          "page": "overview",
+          "type": "line",
+          "original_type": "lineChart",
+          "position": {
+            "x": 20.0,
+            "y": 300.0,
+            "w": 610.0,
+            "h": 400.0
+          },
+          "encodings": [
+            {
+              "role": "x",
+              "field": {
+                "table": "Date",
+                "name": "month",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "series",
+              "field": {
+                "table": "Date",
+                "name": "year",
+                "kind": "column",
+                "aggregation": null
+              }
+            },
+            {
+              "role": "y",
+              "field": {
+                "table": "Sales",
+                "name": "Sales YTD",
+                "kind": "measure",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        },
+        {
+          "id": "slicerDate",
+          "page": "overview",
+          "type": "slicer",
+          "original_type": "slicer",
+          "position": {
+            "x": 20.0,
+            "y": 20.0,
+            "w": 400.0,
+            "h": 120.0
+          },
+          "encodings": [
+            {
+              "role": "values",
+              "field": {
+                "table": "Date",
+                "name": "date",
+                "kind": "column",
+                "aggregation": null
+              }
+            }
+          ],
+          "sort": [],
+          "top_n": null,
+          "filters": [],
+          "title": null,
+          "number_format": null
+        }
+      ],
+      "filters": [
+        {
+          "level": "page",
+          "field": {
+            "table": "Date",
+            "name": "date",
+            "kind": "column",
+            "aggregation": null
+          },
+          "operator": "between",
+          "values": [],
+          "is_slicer": true
+        }
+      ]
+    }
+  ],
+  "filters": [],
+  "parameters": [],
+  "rls_roles": [],
+  "unknowns": []
+}

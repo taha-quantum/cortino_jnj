@@ -1,0 +1,278 @@
+{
+  "plan_version": "0.1",
+  "source_map": [
+    {
+      "source_id": "Sales",
+      "spec_table": "Sales",
+      "target_table": "analytics.sales",
+      "confidence": 1.0,
+      "method": "explicit",
+      "evidence": "configured source mapping"
+    },
+    {
+      "source_id": "Customer",
+      "spec_table": "Customer",
+      "target_table": "analytics.customers",
+      "confidence": 1.0,
+      "method": "explicit",
+      "evidence": "configured source mapping"
+    },
+    {
+      "source_id": "Product",
+      "spec_table": "Product",
+      "target_table": "analytics.products",
+      "confidence": 1.0,
+      "method": "explicit",
+      "evidence": "configured source mapping"
+    },
+    {
+      "source_id": "Date",
+      "spec_table": "Date",
+      "target_table": "analytics.dates",
+      "confidence": 1.0,
+      "method": "explicit",
+      "evidence": "configured source mapping"
+    }
+  ],
+  "column_map": [
+    {
+      "spec_table": "Sales",
+      "spec_column": "order_id",
+      "target_table": "analytics.sales",
+      "target_column": "order_id",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Sales",
+      "spec_column": "order_date",
+      "target_table": "analytics.sales",
+      "target_column": "order_date",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Sales",
+      "spec_column": "customer_id",
+      "target_table": "analytics.sales",
+      "target_column": "customer_id",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Sales",
+      "spec_column": "product_id",
+      "target_table": "analytics.sales",
+      "target_column": "product_id",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Sales",
+      "spec_column": "quantity",
+      "target_table": "analytics.sales",
+      "target_column": "quantity",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Sales",
+      "spec_column": "amount",
+      "target_table": "analytics.sales",
+      "target_column": "amount",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Customer",
+      "spec_column": "customer_id",
+      "target_table": "analytics.customers",
+      "target_column": "customer_id",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Customer",
+      "spec_column": "name",
+      "target_table": "analytics.customers",
+      "target_column": "name",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Customer",
+      "spec_column": "region",
+      "target_table": "analytics.customers",
+      "target_column": "region",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Product",
+      "spec_column": "product_id",
+      "target_table": "analytics.products",
+      "target_column": "product_id",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Product",
+      "spec_column": "name",
+      "target_table": "analytics.products",
+      "target_column": "name",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Product",
+      "spec_column": "category",
+      "target_table": "analytics.products",
+      "target_column": "category",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Date",
+      "spec_column": "date",
+      "target_table": "analytics.dates",
+      "target_column": "date",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Date",
+      "spec_column": "year",
+      "target_table": "analytics.dates",
+      "target_column": "year",
+      "types_compatible": true
+    },
+    {
+      "spec_table": "Date",
+      "spec_column": "month",
+      "target_table": "analytics.dates",
+      "target_column": "month",
+      "types_compatible": true
+    }
+  ],
+  "measures": [
+    {
+      "name": "Total Sales",
+      "original": "SUM(Sales[amount])",
+      "sql_expression": "SUM(analytics.sales.amount)",
+      "difficulty": "simple",
+      "test_query": null,
+      "flagged": false
+    },
+    {
+      "name": "Order Count",
+      "original": "DISTINCTCOUNT(Sales[order_id])",
+      "sql_expression": "COUNT(DISTINCT analytics.sales.order_id) + COALESCE(MAX(CASE WHEN analytics.sales.order_id IS NULL THEN 1 ELSE 0 END), 0)",
+      "difficulty": "simple",
+      "test_query": null,
+      "flagged": false
+    },
+    {
+      "name": "Avg Order",
+      "original": "DIVIDE(\n    [Total Sales],\n    [Order Count]\n)",
+      "sql_expression": "(SUM(analytics.sales.amount)) / NULLIF(COUNT(DISTINCT analytics.sales.order_id) + COALESCE(MAX(CASE WHEN analytics.sales.order_id IS NULL THEN 1 ELSE 0 END), 0), 0)",
+      "difficulty": "simple",
+      "test_query": null,
+      "flagged": false
+    }
+  ],
+  "views": [],
+  "datasets": [
+    {
+      "id": "sales_by_region",
+      "visual_ids": [
+        "barSalesByRegion"
+      ],
+      "sql": "SELECT c.region, SUM(s.amount) AS total_sales FROM analytics.sales s JOIN analytics.customers c ON s.customer_id = c.customer_id WHERE ($region IS NULL OR c.region = $region) GROUP BY 1",
+      "params": [
+        {
+          "name": "region",
+          "type": "string"
+        }
+      ],
+      "columns": []
+    },
+    {
+      "id": "total_sales",
+      "visual_ids": [
+        "cardTotalSales"
+      ],
+      "sql": "SELECT SUM(s.amount) AS total_sales FROM analytics.sales s JOIN analytics.customers c ON s.customer_id = c.customer_id WHERE ($region IS NULL OR c.region = $region)",
+      "params": [
+        {
+          "name": "region",
+          "type": "string"
+        }
+      ],
+      "columns": []
+    },
+    {
+      "id": "sales_by_month",
+      "visual_ids": [
+        "lineSalesByMonth"
+      ],
+      "sql": "SELECT d.month, SUM(s.amount) AS total_sales FROM analytics.sales s JOIN analytics.customers c ON s.customer_id = c.customer_id JOIN analytics.dates d ON s.order_date = d.date WHERE ($region IS NULL OR c.region = $region) GROUP BY 1",
+      "params": [
+        {
+          "name": "region",
+          "type": "string"
+        }
+      ],
+      "columns": []
+    },
+    {
+      "id": "by_category",
+      "visual_ids": [
+        "tableByCategory"
+      ],
+      "sql": "SELECT p.category, SUM(s.amount) AS total_sales, COUNT(DISTINCT s.order_id) + COALESCE(MAX(CASE WHEN s.order_id IS NULL THEN 1 ELSE 0 END), 0) AS order_count FROM analytics.sales s JOIN analytics.customers c ON s.customer_id = c.customer_id JOIN analytics.products p ON s.product_id = p.product_id WHERE ($region IS NULL OR c.region = $region) GROUP BY 1",
+      "params": [
+        {
+          "name": "region",
+          "type": "string"
+        }
+      ],
+      "columns": []
+    }
+  ],
+  "visual_map": [
+    {
+      "visual_id": "barSalesByRegion",
+      "component": "bar",
+      "dataset_id": "sales_by_region"
+    },
+    {
+      "visual_id": "cardTotalSales",
+      "component": "card",
+      "dataset_id": "total_sales"
+    },
+    {
+      "visual_id": "lineSalesByMonth",
+      "component": "line",
+      "dataset_id": "sales_by_month"
+    },
+    {
+      "visual_id": "tableByCategory",
+      "component": "table",
+      "dataset_id": "by_category"
+    }
+  ],
+  "unsupported": [
+    {
+      "item": "visual:customXyz",
+      "reason": "custom visual customVisualXYZ",
+      "fallback": "not rebuilt — review manually"
+    },
+    {
+      "item": "rls:RegionManager",
+      "reason": "row-level security on Customer: Customer[region] = \"West\"",
+      "fallback": "needs platform decision — not rebuilt"
+    }
+  ],
+  "questions": [],
+  "tasks": [
+    {
+      "owner": "data",
+      "description": "write the four datasets",
+      "depends_on": []
+    },
+    {
+      "owner": "ui",
+      "description": "lay out the page",
+      "depends_on": [
+        "data"
+      ]
+    }
+  ]
+}

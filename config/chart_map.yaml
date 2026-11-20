@@ -1,0 +1,17 @@
+# Normalized spec visual type -> reference-platform chart component.
+# "unsupported": no standard equivalent; the planner lists the visual in plan.unsupported
+# and the visual is rebuilt as the closest standard chart (table).
+# slicer is not a chart: it becomes a dashboard filter control.
+chart_map:
+  bar: bar
+  column: column
+  line: line
+  area: area
+  pie: pie
+  donut: donut
+  table: table
+  matrix: table
+  card: card
+  scatter: scatter
+  map: unsupported
+  unknown: unsupported

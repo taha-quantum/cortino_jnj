@@ -1,0 +1,13 @@
+relationship 6e0a7df9-c2f0-4de1-aa44-79df8e0a0424
+	fromColumn: Sales.customer_id
+	toColumn: Customer.customer_id
+
+relationship b00a3ae4-f0dd-4bcd-9801-17971d856382
+	fromColumn: Sales.product_id
+	toColumn: Product.product_id
+
+relationship 22d0e63c-3551-444e-9932-6d46af2c6572
+	joinOnDateBehavior: datePartOnly
+	fromColumn: Sales.order_date
+	toColumn: Date.date
+

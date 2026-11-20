@@ -1,0 +1,8 @@
+warehouse:
+  kind: duckdb
+  path: ""  # set to the DuckDB warehouse file for your environment
+mappings:
+  "server01.salesdb.dbo.Sales": analytics.sales
+  "server01.salesdb.dbo.Customers": analytics.customers
+  "server01.salesdb.dbo.Products": analytics.products
+  "server01.salesdb.dbo.Dates": analytics.dates

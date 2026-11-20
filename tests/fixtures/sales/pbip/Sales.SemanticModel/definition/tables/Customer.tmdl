@@ -1,0 +1,40 @@
+table Customer
+	lineageTag: b9875315-7c50-4128-bbb9-7582bfce4273
+
+	column customer_id
+		dataType: int64
+		isKey
+		formatString: 0
+		lineageTag: cdd42885-f3ab-419c-b779-dcb737b17f34
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column name
+		dataType: string
+		lineageTag: 1a4d3cd6-cd29-462a-a3aa-3d9fe22be92d
+		summarizeBy: none
+		sourceColumn: name
+
+		annotation SummarizationSetBy = Automatic
+
+	column region
+		dataType: string
+		lineageTag: 91faee9a-187e-47f5-b0d0-3bfc15b7d11a
+		summarizeBy: none
+		sourceColumn: region
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("server01", "salesdb"),
+				    dbo_Customers = Source{[Schema="dbo",Item="Customers"]}[Data]
+				in
+				    dbo_Customers
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,2 @@
+git_host: local  # "github" pushes the branch and opens a PR with the gh CLI
+base_branch: main

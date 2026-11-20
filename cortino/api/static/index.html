@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cortino</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; color: #1f2328; background: #fff; }
+  main { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 24px; max-width: 1200px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  section { border: 1px solid #d0d7de; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
+  label { display: block; margin: 8px 0 2px; font-size: 14px; }
+  input[type=text], textarea { width: 100%; box-sizing: border-box; }
+  pre { white-space: pre-wrap; background: #f6f8fa; padding: 8px; max-height: 400px; overflow: auto; }
+  ul#runs { list-style: none; padding: 0; }
+  ul#runs li { padding: 4px 0; cursor: pointer; }
+  ul#runs li.active { font-weight: bold; }
+  .state { font-family: monospace; font-size: 12px; color: #57606a; }
+  button { margin-right: 8px; }
+  .error { color: #cf222e; }
+</style>
+</head>
+<body>
+<h1>Cortino</h1>
+<main>
+  <div>
+    <section>
+      <h2>New run</h2>
+      <form id="upload">
+        <label for="file">Dashboard file (.pbip zip, .pbit, .twb, .twbx)</label>
+        <input id="file" name="file" type="file" required>
+        <label for="name">Dashboard name</label>
+        <input id="name" name="name" type="text" required>
+        <label for="target_repo">Target repo path</label>
+        <input id="target_repo" name="target_repo" type="text" required>
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3"></textarea>
+        <label for="references">Reference images</label>
+        <input id="references" name="references" type="file" accept=".png,.jpg,.jpeg" multiple>
+        <label for="expected">Expected values (CSV per visual, named &lt;visual id&gt;.csv)</label>
+        <input id="expected" name="expected" type="file" accept=".csv" multiple>
+        <p><button type="submit">Upload and start</button> <span id="upload-msg"></span></p>
+      </form>
+    </section>
+    <section>
+      <h2>Runs <button id="refresh" type="button">Refresh</button></h2>
+      <ul id="runs"></ul>
+    </section>
+  </div>
+  <div>
+    <section id="detail" hidden>
+      <h2 id="d-title"></h2>
+      <p>State: <span id="d-state" class="state"></span> <span id="d-busy"></span></p>
+      <p id="d-msg"></p>
+      <h3>Plan</h3>
+      <pre id="d-plan">No plan yet.</pre>
+      <p><button id="approve" type="button">Approve</button><button id="reject" type="button">Reject</button><button id="resume" type="button">Resume</button></p>
+      <div id="preview-gate">
+        <h3>Preview</h3>
+        <p><a id="preview-link" target="_blank" rel="noopener">Open preview</a> ·
+           <a id="compare-link" target="_blank" rel="noopener">Compare with the original</a></p>
+        <label for="change-text">Request changes</label>
+        <textarea id="change-text" rows="3" maxlength="5000"></textarea>
+        <label for="change-visual">Visual id (optional)</label>
+        <input id="change-visual" type="text">
+        <p><button id="request-changes" type="button">Request changes</button></p>
+      </div>
+      <h3>Verify</h3>
+      <ul id="d-verify"></ul>
+      <p id="d-pr"></p>
+      <h3>Progress</h3>
+      <pre id="d-events"></pre>
+    </section>
+  </div>
+</main>
+<script>
+"use strict";
+const GATES = ["AWAITING_PLAN_APPROVAL", "AWAITING_PREVIEW_APPROVAL"];
+let current = null, source = null;
+const $ = (id) => document.getElementById(id);
+
+function el(tag, text) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+async function call(method, url, body) {
+  const opts = { method, headers: {} };
+  if (method !== "GET") opts.headers["X-Cortino"] = "1";  // the API refuses POSTs without it
+  if (body instanceof FormData) opts.body = body;
+  else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(url, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : r.status + " " + JSON.stringify(data.detail));
+  return data;
+}
+
+async function loadRuns() {
+  const runs = await call("GET", "/runs");
+  const list = $("runs");
+  list.replaceChildren(...runs.map((r) => {
+    const li = el("li");
+    li.append(el("span", (r.name || r.id.slice(0, 8)) + " "), el("span", r.state));
+    li.lastChild.className = "state";
+    if (r.id === current) li.className = "active";
+    li.addEventListener("click", () => select(r.id));
+    return li;
+  }));
+}
+
+async function loadDetail() {
+  if (!current) return;
+  const d = await call("GET", "/runs/" + encodeURIComponent(current));
+  $("detail").hidden = false;
+  $("d-title").textContent = d.meta.name || d.id;
+  $("d-state").textContent = d.state;
+  $("d-busy").textContent = d.busy ? "(working...)" : "";
+  $("d-plan").textContent = d.plan_md === null ? "No plan yet." : d.plan_md;
+  const atGate = GATES.includes(d.state) && !d.busy;
+  const atPreview = d.state === "AWAITING_PREVIEW_APPROVAL" && !d.busy;
+  $("approve").disabled = !atGate;
+  $("reject").disabled = !atGate;
+  $("resume").disabled = d.state !== "NEEDS_INPUT" || d.busy;
+  $("request-changes").disabled = !atPreview;
+  $("preview-gate").hidden = d.state !== "AWAITING_PREVIEW_APPROVAL";
+  const base = "/runs/" + encodeURIComponent(d.id) + "/preview";
+  $("preview-link").href = base;
+  $("compare-link").href = base + "?page=compare";
+  const v = $("d-verify");
+  v.replaceChildren();
+  if (d.verify) {
+    v.append(el("li", "overall: " + (d.verify.passed ? "passed" : "failed")));
+    for (const c of d.verify.checks) v.append(el("li", c.name + ": " + (c.skipped ? "skipped" : c.passed ? "passed" : "failed")));
+  }
+  const pr = $("d-pr");
+  pr.replaceChildren();
+  if (d.pr && typeof d.pr.url === "string") {
+    if (/^https?:\/\//.test(d.pr.url)) { const a = el("a", "Pull request: " + d.pr.url); a.href = d.pr.url; pr.append(a); }
+    else pr.append(el("span", "Pull request: " + d.pr.url));
+  }
+}
+
+function follow() {
+  if (source) source.close();
+  $("d-events").textContent = "";
+  source = new EventSource("/runs/" + encodeURIComponent(current) + "/events");
+  source.onmessage = (e) => {
+    let line = e.data;
+    try {
+      const ev = JSON.parse(e.data);
+      line = ev.ts + " " + ev.kind + (ev.kind === "transition" ? " " + ev.from + " -> " + ev.to : "")
+        + (ev.note ? " (" + ev.note + ")" : "") + (ev.error ? " error: " + ev.error : "");
+    } catch (_) { /* show the raw line */ }
+    $("d-events").textContent += line + "\n";
+    loadDetail().catch(show);
+  };
+  source.addEventListener("end", () => { source.close(); source = null; loadDetail().catch(show); loadRuns().catch(show); });
+}
+
+function show(err) { $("d-msg").textContent = err.message; $("d-msg").className = "error"; }
+function info(text) { $("d-msg").textContent = text; $("d-msg").className = ""; }
+
+async function select(id) {
+  current = id;
+  info("");
+  await loadDetail();
+  await loadRuns();
+  follow();
+}
+
+async function act(path, body) {
+  try {
+    await call("POST", "/runs/" + encodeURIComponent(current) + "/" + path, body);
+    info(path + " accepted");
+    await loadDetail();
+    follow();
+  } catch (err) { show(err); }
+}
+
+$("upload").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("upload-msg");
+  msg.textContent = "Uploading...";
+  try {
+    const r = await call("POST", "/runs", new FormData(e.target));
+    msg.textContent = "";
+    e.target.reset();
+    await select(r.id);
+  } catch (err) { msg.textContent = err.message; msg.className = "error"; }
+});
+$("refresh").addEventListener("click", () => loadRuns().catch(show));
+$("approve").addEventListener("click", () => act("approve"));
+$("resume").addEventListener("click", () => act("resume"));
+$("reject").addEventListener("click", () => { if (confirm("Reject this run? The branch and worktree are deleted.")) act("reject"); });
+$("request-changes").addEventListener("click", () => {
+  const text = $("change-text").value.trim();
+  const visual = $("change-visual").value.trim();
+  if (!text) { show(new Error("Describe the change first.")); return; }
+  act("request-changes", { text, visual_id: visual || null });
+});
+loadRuns().catch((err) => { $("upload-msg").textContent = err.message; });
+</script>
+</body>
+</html>

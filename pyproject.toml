@@ -1,0 +1,44 @@
+[project]
+name = "cortino"
+version = "0.1.0"
+description = "Rebuilds Power BI/Tableau dashboards as config-driven dashboards and opens a PR."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "duckdb>=2.0.0",
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "opentelemetry-sdk>=1.45.2",
+    "playwright>=1.65.2",
+    "pydantic>=2.14.4",
+    "python-multipart>=0.0.34",
+    "pyyaml>=6.0.3",
+    "sqlglot>=30.33.0",
+    "strands-agents[anthropic]>=1.65.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+tableau = ["tableauhyperapi", "tableauserverclient"]
+powerbi = ["msal"]
+
+[project.scripts]
+cortino = "cortino.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cortino"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: calls the real Anthropic API; skipped without ANTHROPIC_API_KEY",
+    "browser: drives Chromium via Playwright; without it some skip, the e2e tests assert skipped checks",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]

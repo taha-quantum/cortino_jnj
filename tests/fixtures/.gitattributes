@@ -1,0 +1,9 @@
+# Fixture bytes must be identical on every OS (golden spec embeds raw visual.json text).
+* text=auto eol=lf
+*.zip binary
+*.pbit binary
+*.pbix binary
+*.twbx binary
+*.hyper binary
+*.duckdb binary
+*.png binary

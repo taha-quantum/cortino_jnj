@@ -1,0 +1,73 @@
+{
+  "id": 0,
+  "resourcePackages": [],
+  "sections": [
+    {
+      "config": "{}",
+      "displayName": "Overview",
+      "displayOption": 1,
+      "filters": "[]",
+      "height": 720.0,
+      "name": "overview",
+      "visualContainers": [
+        {
+          "config": "{\"name\":\"cardTotalSales\",\"layouts\":[{\"id\":0,\"position\":{\"x\":20,\"y\":20,\"z\":0,\"width\":300,\"height\":120}}],\"singleVisual\":{\"visualType\":\"card\",\"projections\":{\"Values\":[{\"queryRef\":\"Sales.Total Sales\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"s\",\"Entity\":\"Sales\",\"Type\":0}],\"Select\":[{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Total Sales\"},\"Name\":\"Sales.Total Sales\"}]}}}",
+          "filters": "[]",
+          "height": 120,
+          "width": 300,
+          "x": 20,
+          "y": 20,
+          "z": 0
+        },
+        {
+          "config": "{\"name\":\"slicerRegion\",\"layouts\":[{\"id\":0,\"position\":{\"x\":340,\"y\":20,\"z\":1000,\"width\":300,\"height\":120}}],\"singleVisual\":{\"visualType\":\"slicer\",\"projections\":{\"Values\":[{\"queryRef\":\"Customer.region\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"c\",\"Entity\":\"Customer\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"c\"}},\"Property\":\"region\"},\"Name\":\"Customer.region\"}]}}}",
+          "filters": "[]",
+          "height": 120,
+          "width": 300,
+          "x": 340,
+          "y": 20,
+          "z": 1000
+        },
+        {
+          "config": "{\"name\":\"customXyz\",\"layouts\":[{\"id\":0,\"position\":{\"x\":660,\"y\":20,\"z\":2000,\"width\":600,\"height\":120}}],\"singleVisual\":{\"visualType\":\"customVisualXYZ\",\"projections\":{\"Category\":[{\"queryRef\":\"Product.category\"}],\"Values\":[{\"queryRef\":\"Sum(Sales.quantity)\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"s\",\"Entity\":\"Sales\",\"Type\":0},{\"Name\":\"p\",\"Entity\":\"Product\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"p\"}},\"Property\":\"category\"},\"Name\":\"Product.category\"},{\"Aggregation\":{\"Expression\":{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"quantity\"}},\"Function\":0},\"Name\":\"Sum(Sales.quantity)\"}]}}}",
+          "filters": "[]",
+          "height": 120,
+          "width": 600,
+          "x": 660,
+          "y": 20,
+          "z": 2000
+        },
+        {
+          "config": "{\"name\":\"barSalesByRegion\",\"layouts\":[{\"id\":0,\"position\":{\"x\":20,\"y\":160,\"z\":3000,\"width\":610,\"height\":260}}],\"singleVisual\":{\"visualType\":\"clusteredBarChart\",\"projections\":{\"Category\":[{\"queryRef\":\"Customer.region\"}],\"Y\":[{\"queryRef\":\"Sales.Total Sales\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"s\",\"Entity\":\"Sales\",\"Type\":0},{\"Name\":\"c\",\"Entity\":\"Customer\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"c\"}},\"Property\":\"region\"},\"Name\":\"Customer.region\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Total Sales\"},\"Name\":\"Sales.Total Sales\"}]}}}",
+          "filters": "[]",
+          "height": 260,
+          "width": 610,
+          "x": 20,
+          "y": 160,
+          "z": 3000
+        },
+        {
+          "config": "{\"name\":\"lineSalesByMonth\",\"layouts\":[{\"id\":0,\"position\":{\"x\":650,\"y\":160,\"z\":4000,\"width\":610,\"height\":260}}],\"singleVisual\":{\"visualType\":\"lineChart\",\"projections\":{\"Category\":[{\"queryRef\":\"Date.month\"}],\"Y\":[{\"queryRef\":\"Sales.Total Sales\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"s\",\"Entity\":\"Sales\",\"Type\":0},{\"Name\":\"d\",\"Entity\":\"Date\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"d\"}},\"Property\":\"month\"},\"Name\":\"Date.month\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Total Sales\"},\"Name\":\"Sales.Total Sales\"}]}}}",
+          "filters": "[]",
+          "height": 260,
+          "width": 610,
+          "x": 650,
+          "y": 160,
+          "z": 4000
+        },
+        {
+          "config": "{\"name\":\"tableByCategory\",\"layouts\":[{\"id\":0,\"position\":{\"x\":20,\"y\":440,\"z\":5000,\"width\":1240,\"height\":260}}],\"singleVisual\":{\"visualType\":\"tableEx\",\"projections\":{\"Values\":[{\"queryRef\":\"Product.category\"},{\"queryRef\":\"Sales.Total Sales\"},{\"queryRef\":\"Sales.Order Count\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"s\",\"Entity\":\"Sales\",\"Type\":0},{\"Name\":\"p\",\"Entity\":\"Product\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"p\"}},\"Property\":\"category\"},\"Name\":\"Product.category\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Total Sales\"},\"Name\":\"Sales.Total Sales\"},{\"Measure\":{\"Expression\":{\"SourceRef\":{\"Source\":\"s\"}},\"Property\":\"Order Count\"},\"Name\":\"Sales.Order Count\"}]}}}",
+          "filters": "[]",
+          "height": 260,
+          "width": 1240,
+          "x": 20,
+          "y": 440,
+          "z": 5000
+        }
+      ],
+      "width": 1280.0
+    }
+  ],
+  "config": "{\"version\":\"5.53\"}",
+  "layoutOptimization": 0
+}

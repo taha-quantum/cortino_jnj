@@ -1,0 +1,88 @@
+table Sales
+	lineageTag: cf639626-cec5-48b3-b231-4bd58f52bb13
+
+	measure 'Total Sales' = SUM(Sales[amount])
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 244a35ca-535f-4b1e-b72c-7c9b288a3689
+
+	measure 'Order Count' = DISTINCTCOUNT(Sales[order_id])
+		formatString: 0
+		lineageTag: f92039d7-8f7d-4b9d-b093-4d43bc745971
+
+	measure 'Avg Order' =
+			DIVIDE(
+			    [Total Sales],
+			    [Order Count]
+			)
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 9a177fc3-b820-4f98-921b-c02969ac654e
+
+	column order_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 6eb0b824-7a45-487a-a64c-57dc4df32289
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: bef3ac50-44fa-4d39-a6d2-02f3a84ebf9f
+		summarizeBy: none
+		sourceColumn: order_date
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column customer_id
+		dataType: int64
+		formatString: 0
+		lineageTag: c55345f6-acbb-4010-b439-1892d59f236c
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_id
+		dataType: int64
+		formatString: 0
+		lineageTag: f64edbf3-8a1f-4d83-a7de-57ce1fc567e6
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column quantity
+		dataType: int64
+		formatString: 0
+		lineageTag: cf212b65-5cb5-484f-8522-b9430f20e96f
+		summarizeBy: sum
+		sourceColumn: quantity
+
+		annotation SummarizationSetBy = Automatic
+
+	column amount
+		dataType: decimal
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: bf0c367f-5be2-415e-8f0d-21a7acf8c6dd
+		summarizeBy: sum
+		sourceColumn: amount
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"currencyCulture":"en-US"}
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("server01", "salesdb"),
+				    dbo_Sales = Source{[Schema="dbo",Item="Sales"]}[Data]
+				in
+				    dbo_Sales
+
+	annotation PBI_ResultType = Table
+

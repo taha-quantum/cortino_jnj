@@ -1,0 +1,14 @@
+tolerance_abs: 0.01
+tolerance_rel: 0.001
+max_verify_loops: 3
+max_integrate_retries: 2
+max_upload_mb: 500
+max_unpacked_mb: 2000
+readonly_sql_limit: 1000
+readonly_sql_timeout_s: 30
+auto_approve_plan_when_all_high_confidence: false
+high_confidence: 0.85
+agent_token_budget: 200000
+agent_time_budget_s: 600
+visual_score_min: 0.7
+preview_ttl_hours: 8

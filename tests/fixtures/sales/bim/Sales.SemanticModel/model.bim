@@ -1,0 +1,248 @@
+{
+  "name": "Sales",
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "en-US",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "tables": [
+      {
+        "name": "Sales",
+        "columns": [
+          {
+            "name": "order_id",
+            "dataType": "int64",
+            "sourceColumn": "order_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "order_date",
+            "dataType": "dateTime",
+            "sourceColumn": "order_date",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "customer_id",
+            "dataType": "int64",
+            "sourceColumn": "customer_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "product_id",
+            "dataType": "int64",
+            "sourceColumn": "product_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "quantity",
+            "dataType": "int64",
+            "sourceColumn": "quantity",
+            "summarizeBy": "sum"
+          },
+          {
+            "name": "amount",
+            "dataType": "decimal",
+            "sourceColumn": "amount",
+            "summarizeBy": "sum"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Sales",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"server01\", \"salesdb\"),",
+                "    dbo_Sales = Source{[Schema=\"dbo\",Item=\"Sales\"]}[Data]",
+                "in",
+                "    dbo_Sales"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Total Sales",
+            "expression": "SUM(Sales[amount])",
+            "formatString": "\\$#,0.00;(\\$#,0.00);\\$#,0.00"
+          },
+          {
+            "name": "Order Count",
+            "expression": "DISTINCTCOUNT(Sales[order_id])",
+            "formatString": "0"
+          },
+          {
+            "name": "Avg Order",
+            "expression": [
+              "DIVIDE(",
+              "    [Total Sales],",
+              "    [Order Count]",
+              ")"
+            ],
+            "formatString": "\\$#,0.00;(\\$#,0.00);\\$#,0.00"
+          }
+        ]
+      },
+      {
+        "name": "Customer",
+        "columns": [
+          {
+            "name": "customer_id",
+            "dataType": "int64",
+            "sourceColumn": "customer_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "name",
+            "dataType": "string",
+            "sourceColumn": "name",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "region",
+            "dataType": "string",
+            "sourceColumn": "region",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Customer",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"server01\", \"salesdb\"),",
+                "    dbo_Customers = Source{[Schema=\"dbo\",Item=\"Customers\"]}[Data]",
+                "in",
+                "    dbo_Customers"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Product",
+        "columns": [
+          {
+            "name": "product_id",
+            "dataType": "int64",
+            "sourceColumn": "product_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "name",
+            "dataType": "string",
+            "sourceColumn": "name",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "category",
+            "dataType": "string",
+            "sourceColumn": "category",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Product",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"server01\", \"salesdb\"),",
+                "    dbo_Products = Source{[Schema=\"dbo\",Item=\"Products\"]}[Data]",
+                "in",
+                "    dbo_Products"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Date",
+        "columns": [
+          {
+            "name": "date",
+            "dataType": "dateTime",
+            "sourceColumn": "date",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "year",
+            "dataType": "int64",
+            "sourceColumn": "year",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "month",
+            "dataType": "int64",
+            "sourceColumn": "month",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Date",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"server01\", \"salesdb\"),",
+                "    dbo_Dates = Source{[Schema=\"dbo\",Item=\"Dates\"]}[Data]",
+                "in",
+                "    dbo_Dates"
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "6e0a7df9-c2f0-4de1-aa44-79df8e0a0424",
+        "fromTable": "Sales",
+        "fromColumn": "customer_id",
+        "toTable": "Customer",
+        "toColumn": "customer_id"
+      },
+      {
+        "name": "b00a3ae4-f0dd-4bcd-9801-17971d856382",
+        "fromTable": "Sales",
+        "fromColumn": "product_id",
+        "toTable": "Product",
+        "toColumn": "product_id"
+      },
+      {
+        "name": "22d0e63c-3551-444e-9932-6d46af2c6572",
+        "fromTable": "Sales",
+        "fromColumn": "order_date",
+        "toTable": "Date",
+        "toColumn": "date",
+        "joinOnDateBehavior": "datePartOnly"
+      }
+    ],
+    "roles": [
+      {
+        "name": "RegionManager",
+        "modelPermission": "read",
+        "tablePermissions": [
+          {
+            "name": "Customer",
+            "filterExpression": "Customer[region] = \"West\""
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"Sales\",\"Customer\",\"Product\",\"Date\"]"
+      }
+    ]
+  }
+}
