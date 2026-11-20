@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from collections.abc import Callable
@@ -137,25 +138,110 @@ class FakeLLM(_Base):
         return FakeReply(reply if isinstance(reply, str) else json.dumps(reply))
 
 
+PROVIDERS = ("anthropic", "vertex", "gemini")
+
+
+def llm_provider() -> str:
+    """`CORTINO_LLM_PROVIDER`, one of:
+    - "anthropic" (default): Claude via the Anthropic API, needs ANTHROPIC_API_KEY.
+    - "vertex": Claude on Google Cloud Vertex AI. Application Default Credentials, CLOUD_ML_REGION
+      and optionally ANTHROPIC_VERTEX_PROJECT_ID (else the ADC project).
+    - "gemini": Gemini on Vertex AI. Application Default Credentials, GOOGLE_CLOUD_PROJECT (or
+      ANTHROPIC_VERTEX_PROJECT_ID) and GOOGLE_CLOUD_LOCATION (or CLOUD_ML_REGION, else "global").
+      Model IDs come from config/models_gemini.yaml."""
+    provider = os.environ.get("CORTINO_LLM_PROVIDER", "").strip().lower() or "anthropic"
+    if provider not in PROVIDERS:
+        raise LLMError(f"CORTINO_LLM_PROVIDER must be one of {', '.join(PROVIDERS)}, got {provider!r}")
+    return provider
+
+
+def models_config_name() -> str:
+    """The config file (without .yaml) holding the role -> model map for the active provider."""
+    return "models_gemini" if llm_provider() == "gemini" else "models"
+
+
+def _gemini_project() -> str:
+    return os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID") or ""
+
+
+def _gemini_location() -> str:
+    return os.environ.get("GOOGLE_CLOUD_LOCATION") or os.environ.get("CLOUD_ML_REGION") or "global"
+
+
+def live_llm_configured() -> bool:
+    """Whether real model calls can be attempted (used to gate live tests)."""
+    provider = os.environ.get("CORTINO_LLM_PROVIDER", "").strip().lower()
+    if provider == "vertex":
+        return bool(os.environ.get("CLOUD_ML_REGION"))
+    if provider == "gemini":
+        return bool(_gemini_project())
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
 class StrandsLLM(_Base):
-    """Real Claude calls via Strands. The token budget is checked after each agent() call
+    """Real model calls via Strands: Claude through the Anthropic API or Vertex AI, or Gemini
+    through Vertex AI (see llm_provider). The token budget is checked after each agent() call
     returns, so a tool-using agent can overspend within a single call."""
 
     def __init__(self, models: dict, budgets: dict, on_usage=None):
         super().__init__(budgets, on_usage)
         self.models = models
+        self._client = None
+
+    def _make_model(self, provider: str, model_id: str):
+        if provider == "gemini":
+            from strands.models.gemini import (
+                GeminiModel,  # needs the gemini extra (google-genai)
+            )
+
+            project = _gemini_project()
+            if not project:
+                raise LLMError("gemini: set GOOGLE_CLOUD_PROJECT (or ANTHROPIC_VERTEX_PROJECT_ID)")
+            return GeminiModel(
+                client_args={"vertexai": True, "project": project, "location": _gemini_location()},
+                model_id=model_id,
+                params={"max_output_tokens": MAX_TOKENS},
+            )
+        from strands.models.anthropic import AnthropicModel
+
+        kwargs = {}
+        if provider == "vertex":
+            if self._client is None:
+                from anthropic import (
+                    AsyncAnthropicVertex,  # needs the vertex extra (google-auth)
+                )
+
+                self._client = AsyncAnthropicVertex()
+            kwargs["client"] = self._client
+        return AnthropicModel(model_id=model_id, max_tokens=MAX_TOKENS, **kwargs)
 
     def _complete(self, role, system, prompt, tools, images) -> FakeReply:
         from strands import Agent
-        from strands.models.anthropic import AnthropicModel
 
         if role not in self.models:
             raise LLMError(f"no model configured for role {role!r}")
+        provider = llm_provider()
+        model_id = self.models[role]
+        if provider == "anthropic" and not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+            raise LLMError(
+                f"{role}: ANTHROPIC_API_KEY is not set. Set it, or set CORTINO_LLM_PROVIDER to "
+                "'vertex' or 'gemini' (in the shell or in .env)"
+            )
         try:
-            model = AnthropicModel(model_id=self.models[role], max_tokens=MAX_TOKENS)
+            model = self._make_model(provider, model_id)
+        except LLMError:
+            raise
+        except ImportError as e:
+            raise LLMError(f"provider {provider!r} needs its extra: uv sync --extra {provider}") from e
+        except Exception as e:
+            if provider == "anthropic":  # may echo the API key; keep only the type
+                raise LLMError(f"{role}: could not set up model {model_id!r}: {type(e).__name__}") from e
+            # Google SDK messages (e.g. no CLOUD_ML_REGION) carry no secrets and say what is missing
+            raise LLMError(f"{role}: could not set up {provider} model {model_id!r}: {e}") from e
+        try:
             agent = Agent(model=model, system_prompt=system, tools=tools or [], callback_handler=None)
         except Exception as e:
-            raise LLMError(f"{role}: could not set up model {self.models[role]!r}: {type(e).__name__}") from e
+            raise LLMError(f"{role}: could not set up model {model_id!r}: {type(e).__name__}") from e
         content = prompt
         if images:
             content = [{"text": prompt}] + [

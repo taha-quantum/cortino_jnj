@@ -1,0 +1,6 @@
+# Role -> Gemini model on Vertex AI, used when CORTINO_LLM_PROVIDER=gemini.
+# All four answered a test call in project qi-ai-sbx, location "global", on 2026-11-20.
+planner: gemini-3.1-pro-preview
+builder: gemini-3.8-flash
+checker: gemini-3.8-flash
+cheap: gemini-3.5-flash-lite

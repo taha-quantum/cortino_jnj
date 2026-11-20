@@ -4,7 +4,6 @@ through the real stages with scripted LLM replies that follow the skill patterns
 
 import csv
 import json
-import os
 import shutil
 from decimal import Decimal
 
@@ -28,7 +27,7 @@ from cortino.building.data_builder import build_data
 from cortino.building.datasets import dashboard_dir
 from cortino.building.ui_builder import build_ui, ui_skipped
 from cortino.checking.data_values import _roles, compare
-from cortino.llm import FakeLLM, StrandsLLM
+from cortino.llm import FakeLLM, StrandsLLM, live_llm_configured, models_config_name
 from cortino.orchestrator.states import RunState as S
 from cortino.planning.planner import PlanError, make_plan
 from cortino.platform.config_schema import DashboardConfig
@@ -151,13 +150,13 @@ def test_tableau_hard_fixture_reaches_preview(store, catalog, repo, tmp_path, ch
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
+@pytest.mark.skipif(not live_llm_configured(), reason="needs ANTHROPIC_API_KEY or Vertex AI settings")
 @pytest.mark.parametrize("source", ["pbip", "twb"])
 def test_hard_fixture_live_planner(source, catalog, warehouse, tmp_path, record_property):
     """The real planner on the hard fixture. How well it translates hard calculations is reported
     (per visual: does its dataset match the expected CSV?), not asserted."""
     spec = load_spec(HARD / CASES[source][0])
-    llm = StrandsLLM(config.load("models"), config.load("thresholds"))
+    llm = StrandsLLM(config.load(models_config_name()), config.load("thresholds"))
     try:
         plan = make_plan(spec, catalog, llm, CHART_MAP)
     except PlanError as e:

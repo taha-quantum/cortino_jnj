@@ -19,7 +19,10 @@
   th, td { border-bottom: 1px solid #eee; padding: 2px 6px; text-align: left; }
   .body { overflow: auto; }
   .error { color: #b00020; font-size: 12px; }
+  .body svg { display: block; }  /* inline SVGs add baseline space that overflows the chart box */
   svg text { font-size: 10px; fill: #444; }
+  svg text.value { font-size: 10px; fill: #222; font-weight: 600; }
+  svg line.grid { stroke: #e6e6e6; stroke-width: 1; }
 </style>
 </head>
 <body>

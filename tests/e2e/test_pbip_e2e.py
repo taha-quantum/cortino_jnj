@@ -2,7 +2,6 @@
 gate -> PR, offline (scripted LLM, DuckDB warehouse, temp git repo, LocalGitHost)."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,7 @@ from scripted_llm import VISUALS, sales_llm
 
 from cortino import config
 from cortino.checking import verify
-from cortino.llm import StrandsLLM
+from cortino.llm import StrandsLLM, live_llm_configured, models_config_name
 from cortino.orchestrator import stages
 from cortino.orchestrator.states import RunState as S
 
@@ -149,10 +148,10 @@ def test_wrong_measure_triggers_fix_loop(monkeypatch, store, catalog, upload, re
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
+@pytest.mark.skipif(not live_llm_configured(), reason="needs ANTHROPIC_API_KEY or Vertex AI settings")
 def test_pbip_live(store, catalog, upload, repo, sales_fixture):
     """Real models: the output is not deterministic, so only a gate or a clear FAILED is asserted."""
-    llm = StrandsLLM(config.load("models"), config.load("thresholds"))
+    llm = StrandsLLM(config.load(models_config_name()), config.load("thresholds"))
     runner = _runner(store, catalog, llm)
     rid = _create(store, upload, repo, sales_fixture)
     state = runner.advance(rid)

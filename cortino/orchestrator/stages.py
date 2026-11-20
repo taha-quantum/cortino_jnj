@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -13,7 +14,7 @@ from cortino.building.worktree import commit_all, create_worktree, slugify
 from cortino.checking import Finding
 from cortino.checking.verify import run_verify
 from cortino.intake.intake import run_intake
-from cortino.llm import LLM, StrandsLLM
+from cortino.llm import LLM, StrandsLLM, models_config_name
 from cortino.orchestrator.runner import RunContext, StageError, StageFn, StageResult
 from cortino.orchestrator.states import RunState as S
 from cortino.parsers.dispatch import parse
@@ -62,11 +63,12 @@ class StageDeps:
 def real_deps() -> StageDeps:
     thresholds = config.load("thresholds")
     sources = config.load("sources")
-    path = sources["warehouse"]["path"]
+    # CORTINO_WAREHOUSE_PATH (shell or .env) wins, so a machine's own path stays out of git.
+    path = os.environ.get("CORTINO_WAREHOUSE_PATH") or sources["warehouse"]["path"]
     if not path:
-        raise StageError("warehouse.path is not set in config/sources.yaml")
+        raise StageError("warehouse.path is not set in config/sources.yaml (or set CORTINO_WAREHOUSE_PATH)")
     return StageDeps(
-        llm=StrandsLLM(config.load("models"), thresholds),
+        llm=StrandsLLM(config.load(models_config_name()), thresholds),
         catalog=SourceCatalog(DuckDBWarehouse(path, read_only=True), sources["mappings"]),
         chart_map=config.load("chart_map")["chart_map"],
         thresholds=thresholds,

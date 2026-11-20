@@ -1,9 +1,15 @@
-import os
 
 import pytest
 from pydantic import BaseModel
 
-from cortino.llm import FakeLLM, FakeReply, LLMError, StrandsLLM
+from cortino.llm import (
+    FakeLLM,
+    FakeReply,
+    LLMError,
+    StrandsLLM,
+    live_llm_configured,
+    models_config_name,
+)
 
 
 class Plan(BaseModel):
@@ -42,7 +48,8 @@ def test_json_extracted_from_prose(reply):
 
 
 def test_strands_setup_failure_names_role(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("CORTINO_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
     llm = StrandsLLM({"planner": "claude-x"}, {})
     import strands.models.anthropic as am
 
@@ -53,6 +60,118 @@ def test_strands_setup_failure_names_role(monkeypatch):
     with pytest.raises(LLMError, match="planner") as ei:
         llm.text("planner", "s", "p")
     assert "sk-secret" not in str(ei.value)
+
+
+def test_vertex_provider_passes_vertex_client(monkeypatch):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "vertex")
+    import anthropic
+    import strands.models.anthropic as am
+
+    made = []
+
+    class FakeVertex:
+        def __init__(self, **kw):
+            made.append(kw)
+
+    seen = {}
+
+    def capture(**kw):
+        seen.update(kw)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropicVertex", FakeVertex)
+    monkeypatch.setattr(am, "AnthropicModel", capture)
+    llm = StrandsLLM({"planner": "claude-x"}, {})
+    with pytest.raises(LLMError, match="planner"):
+        llm.text("planner", "s", "p")
+    assert isinstance(seen["client"], FakeVertex)
+    assert seen["model_id"] == "claude-x"
+    with pytest.raises(LLMError):
+        llm.text("planner", "s", "p")
+    assert len(made) == 1  # one client per StrandsLLM
+
+
+def test_vertex_missing_region_is_clear(monkeypatch):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "vertex")
+    monkeypatch.delenv("CLOUD_ML_REGION", raising=False)
+    import anthropic
+
+    def no_region(**kw):
+        raise ValueError("No region was given.")
+
+    monkeypatch.setattr(anthropic, "AsyncAnthropicVertex", no_region)
+    with pytest.raises(LLMError, match="could not set up vertex model .*No region"):
+        StrandsLLM({"planner": "claude-x"}, {}).text("planner", "s", "p")
+
+
+def test_anthropic_without_key_says_what_to_set(monkeypatch):
+    monkeypatch.delenv("CORTINO_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    with pytest.raises(LLMError, match="planner: ANTHROPIC_API_KEY is not set.*CORTINO_LLM_PROVIDER"):
+        StrandsLLM({"planner": "claude-x"}, {}).text("planner", "s", "p")
+
+
+def test_anthropic_provider_passes_no_client(monkeypatch):
+    monkeypatch.delenv("CORTINO_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    import strands.models.anthropic as am
+
+    seen = {}
+
+    def capture(**kw):
+        seen.update(kw)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(am, "AnthropicModel", capture)
+    with pytest.raises(LLMError):
+        StrandsLLM({"planner": "claude-x"}, {}).text("planner", "s", "p")
+    assert "client" not in seen
+
+
+def test_gemini_provider_uses_vertex_gemini(monkeypatch):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "proj-x")
+    monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+    monkeypatch.delenv("CLOUD_ML_REGION", raising=False)
+    import strands.models.gemini as gm
+
+    seen = {}
+
+    def capture(**kw):
+        seen.update(kw)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(gm, "GeminiModel", capture)
+    with pytest.raises(LLMError, match="planner"):
+        StrandsLLM({"planner": "gemini-x"}, {}).text("planner", "s", "p")
+    assert seen["model_id"] == "gemini-x"
+    assert seen["client_args"] == {"vertexai": True, "project": "proj-x", "location": "global"}
+    assert seen["params"]["max_output_tokens"] > 0
+
+
+def test_gemini_needs_project(monkeypatch):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "gemini")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("ANTHROPIC_VERTEX_PROJECT_ID", raising=False)
+    with pytest.raises(LLMError, match="GOOGLE_CLOUD_PROJECT"):
+        StrandsLLM({"planner": "gemini-x"}, {}).text("planner", "s", "p")
+
+
+def test_models_config_follows_provider(monkeypatch):
+    from cortino.config import load
+
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "gemini")
+    assert models_config_name() == "models_gemini"
+    assert set(load("models_gemini")) == set(load("models"))  # same roles for every provider
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "vertex")
+    assert models_config_name() == "models"
+
+
+def test_unknown_provider_rejected(monkeypatch):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "openai")
+    with pytest.raises(LLMError, match="CORTINO_LLM_PROVIDER"):
+        StrandsLLM({"planner": "claude-x"}, {}).text("planner", "s", "p")
 
 
 def test_malformed_then_valid_retries_once():
@@ -111,10 +230,10 @@ def test_exhausted_script_raises_clearly():
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="needs ANTHROPIC_API_KEY")
+@pytest.mark.skipif(not live_llm_configured(), reason="needs ANTHROPIC_API_KEY or Vertex AI settings")
 def test_strands_live_structured():
     from cortino.config import load
 
-    llm = StrandsLLM(load("models"), load("thresholds"))
+    llm = StrandsLLM(load(models_config_name()), load("thresholds"))
     out = llm.structured("cheap", "Answer tersely.", "Plan: title 'x', 3 steps.", Plan)
     assert out.steps == 3

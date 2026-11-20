@@ -30,7 +30,16 @@ def _zip_pbip(sales_fixture, dest):
     return dest
 
 
-def test_cli_run_on_sales_pbip_parses_then_planner_needs_warehouse(tmp_path, sales_fixture, capsys):
+def test_cli_run_on_sales_pbip_parses_then_planner_needs_warehouse(tmp_path, sales_fixture, capsys, monkeypatch):
+    # Pin "no warehouse configured", whatever this machine's sources.yaml or environment says.
+    from cortino.orchestrator import stages
+
+    real_load = stages.config.load
+    monkeypatch.setattr(
+        stages.config, "load",
+        lambda name: {**real_load(name), "warehouse": {"kind": "duckdb", "path": ""}} if name == "sources" else real_load(name),
+    )
+    monkeypatch.delenv("CORTINO_WAREHOUSE_PATH", raising=False)
     upload = _zip_pbip(sales_fixture, tmp_path / "sales.zip")
     runs = tmp_path / "runs"
     base = ["--runs-dir", str(runs)]

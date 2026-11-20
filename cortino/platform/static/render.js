@@ -29,6 +29,15 @@
   function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
   function fmt(v) { return typeof v === "number" ? v.toLocaleString() : (v === null || v === undefined ? "" : String(v)); }
   function color(i) { return COLORS[i % COLORS.length]; }
+  // Compact axis and data labels: 31642.75 -> "31.6K", 0.25 -> "0.25".
+  function short(v) {
+    var n = num(v), a = Math.abs(n);
+    if (a >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+    if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+    if (a >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(Math.round(n * 100) / 100);
+  }
+  function tip(node, text) { node.appendChild(svgEl("title", {}, text)); return node; }
 
   function allChartIds() {
     var ids = [];
@@ -72,6 +81,7 @@
 
   function legend(node, names) {
     node.replaceChildren();
+    node.style.display = names.length < 2 ? "none" : "";  // an empty legend must not take the chart's space
     if (names.length < 2) return;
     names.forEach(function (n, i) {
       var s = el("span", {}, "■ " + n);
@@ -89,19 +99,23 @@
   function bars(chart, rows, w, h, horizontal) {
     var s = svgEl("svg", { width: w, height: h });
     var cols = ys(chart), x = chart.encodings.x, max = maxOf(rows, cols);
-    var left = horizontal ? 90 : 30, bottom = horizontal ? 4 : 18;
-    var pw = Math.max(1, w - left - 8), ph = Math.max(1, h - bottom - 4);
+    // Room for category labels on one side and the value labels past the end of each bar.
+    var left = horizontal ? 90 : 8, bottom = horizontal ? 4 : 18, top = horizontal ? 4 : 16, right = horizontal ? 44 : 8;
+    var pw = Math.max(1, w - left - right), ph = Math.max(1, h - bottom - top);
     var band = (horizontal ? ph : pw) / Math.max(1, rows.length), bar = band * 0.8 / Math.max(1, cols.length);
     rows.forEach(function (r, i) {
       var start = i * band + band * 0.1;
       cols.forEach(function (c, j) {
         var len = Math.abs(num(r[c])) / max * (horizontal ? pw : ph), off = start + j * bar;
-        s.appendChild(svgEl("rect", horizontal
-          ? { x: left, y: 4 + off, width: len, height: bar, fill: color(j) }
-          : { x: left + off, y: 4 + ph - len, width: bar, height: len, fill: color(j) }));
+        s.appendChild(tip(svgEl("rect", horizontal
+          ? { x: left, y: top + off, width: len, height: bar, fill: color(j) }
+          : { x: left + off, y: top + ph - len, width: bar, height: len, fill: color(j) }), fmt(r[x]) + ": " + fmt(r[c])));
+        s.appendChild(svgEl("text", horizontal
+          ? { x: left + len + 4, y: top + off + bar / 2, "dominant-baseline": "middle", class: "value" }
+          : { x: left + off + bar / 2, y: top + ph - len - 4, "text-anchor": "middle", class: "value" }, short(r[c])));
       });
       s.appendChild(svgEl("text", horizontal
-        ? { x: left - 4, y: 4 + start + band * 0.45, "text-anchor": "end" }
+        ? { x: left - 4, y: top + start + band * 0.4, "text-anchor": "end", "dominant-baseline": "middle" }
         : { x: left + start + band * 0.4, y: h - 4, "text-anchor": "middle" }, fmt(r[x])));
     });
     return s;
@@ -110,18 +124,29 @@
   function lines(chart, rows, w, h, area) {
     var s = svgEl("svg", { width: w, height: h });
     var cols = ys(chart), x = chart.encodings.x, max = maxOf(rows, cols);
-    var left = 30, pw = Math.max(1, w - left - 8), ph = Math.max(1, h - 22);
+    var left = 44, top = 8, pw = Math.max(1, w - left - 12), ph = Math.max(1, h - top - 22);
     var step = pw / Math.max(1, rows.length - 1);
+    function yAt(v) { return top + ph - num(v) / max * ph; }
+    [0, 0.5, 1].forEach(function (f) {  // value axis: gridlines at 0, half and the maximum
+      var y = top + ph - f * ph;
+      s.appendChild(svgEl("line", { x1: left, x2: left + pw, y1: y, y2: y, class: "grid" }));
+      s.appendChild(svgEl("text", { x: left - 6, y: y, "text-anchor": "end", "dominant-baseline": "middle" }, short(max * f)));
+    });
     cols.forEach(function (c, j) {
-      var pts = rows.map(function (r, i) { return (left + i * step) + "," + (4 + ph - num(r[c]) / max * ph); });
+      var pts = rows.map(function (r, i) { return (left + i * step) + "," + yAt(r[c]); });
       if (area && pts.length) {
-        var poly = [left + "," + (4 + ph)].concat(pts, [(left + (rows.length - 1) * step) + "," + (4 + ph)]);
+        var poly = [left + "," + (top + ph)].concat(pts, [(left + (rows.length - 1) * step) + "," + (top + ph)]);
         s.appendChild(svgEl("polygon", { points: poly.join(" "), fill: color(j), "fill-opacity": 0.3 }));
       }
       s.appendChild(svgEl("polyline", { points: pts.join(" "), fill: "none", stroke: color(j), "stroke-width": 2 }));
+      rows.forEach(function (r, i) {
+        s.appendChild(tip(svgEl("circle", { cx: left + i * step, cy: yAt(r[c]), r: 3, fill: color(j) }),
+          fmt(r[x]) + ": " + fmt(r[c])));
+      });
     });
+    var every = Math.max(1, Math.ceil(rows.length * 28 / pw));  // thin the category labels when they would overlap
     rows.forEach(function (r, i) {
-      s.appendChild(svgEl("text", { x: left + i * step, y: h - 4, "text-anchor": "middle" }, fmt(r[x])));
+      if (i % every === 0) s.appendChild(svgEl("text", { x: left + i * step, y: h - 4, "text-anchor": "middle" }, fmt(r[x])));
     });
     return s;
   }
