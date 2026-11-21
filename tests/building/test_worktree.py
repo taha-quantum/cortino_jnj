@@ -112,3 +112,34 @@ def test_worktree_starts_from_the_configured_base_branch(tmp_git_repo, tmp_path)
     wt = create_worktree(tmp_git_repo, tmp_path / "run", "sales", "abcdef1234567890")
     assert _git(wt.path, "rev-parse", "HEAD") == main
     assert not (wt.path / "wip.txt").exists()
+
+
+def test_relative_paths_never_commit_to_the_enclosing_repo(tmp_git_repo, tmp_path, monkeypatch):
+    """Cortino's process runs inside its own git repo with a relative runs/ folder and a relative
+    target repo. The worktree must land in runs/, belong to the target repo, and commits must never
+    reach the repository that encloses the working directory."""
+    home = tmp_path / "cortino_home"
+    home.mkdir()
+    _git(home, "init", "-b", "main")
+    _git(home, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "home")
+    (home / "tracked.txt").write_text("uncommitted work", encoding="utf-8")
+    monkeypatch.chdir(home)
+    target = os.path.relpath(tmp_git_repo, home)
+
+    wt = create_worktree(target, os.path.join("runs", "r1"), "sales", "abcdef1234567890")
+    assert wt.path == (home / "runs" / "r1" / "worktree").resolve()
+    assert wt.path.is_absolute() and wt.repo.is_absolute()
+    assert not (tmp_git_repo / "runs").exists()  # not created inside the target repo
+    (wt.path / "dashboard.json").write_text("{}", encoding="utf-8")
+    commit_all(wt, "cortino: build v1")
+
+    assert _git(home, "log", "--format=%s") == "home"  # the enclosing repo is untouched
+    assert "dashboard.json" in _git(tmp_git_repo, "ls-tree", "-r", "--name-only", wt.branch)
+
+
+def test_commit_refuses_a_folder_that_is_not_its_own_worktree(tmp_git_repo, tmp_path):
+    wt = create_worktree(tmp_git_repo, tmp_path / "run", "sales", "abcdef1234567890")
+    stray = type(wt)(tmp_git_repo / "sub", wt.branch, wt.repo)  # inside a repo, but not a worktree root
+    stray.path.mkdir()
+    with pytest.raises(RuntimeError, match="not a worktree"):
+        commit_all(stray, "nope")

@@ -20,9 +20,11 @@ dependencies = [
 [project.optional-dependencies]
 tableau = ["tableauhyperapi", "tableauserverclient"]
 powerbi = ["msal"]
+vertex = ["anthropic[vertex]"]
+gemini = ["strands-agents[gemini]"]
 
 [project.scripts]
-cortino = "cortino.cli:main"
+cortino = "cortino.cli:entry"
 
 [build-system]
 requires = ["hatchling"]
@@ -33,7 +35,7 @@ packages = ["cortino"]
 
 [tool.pytest.ini_options]
 markers = [
-    "live: calls the real Anthropic API; skipped without ANTHROPIC_API_KEY",
+    "live: calls real Claude models; skipped without ANTHROPIC_API_KEY (or CORTINO_LLM_PROVIDER=vertex with CLOUD_ML_REGION)",
     "browser: drives Chromium via Playwright; without it some skip, the e2e tests assert skipped checks",
 ]
 

@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -13,7 +14,7 @@ from cortino.building.worktree import commit_all, create_worktree, slugify
 from cortino.checking import Finding
 from cortino.checking.verify import run_verify
 from cortino.intake.intake import run_intake
-from cortino.llm import LLM, StrandsLLM
+from cortino.llm import LLM, StrandsLLM, models_config_name
 from cortino.orchestrator.runner import RunContext, StageError, StageFn, StageResult
 from cortino.orchestrator.states import RunState as S
 from cortino.parsers.dispatch import parse
@@ -62,11 +63,12 @@ class StageDeps:
 def real_deps() -> StageDeps:
     thresholds = config.load("thresholds")
     sources = config.load("sources")
-    path = sources["warehouse"]["path"]
+    # CORTINO_WAREHOUSE_PATH (shell or .env) wins, so a machine's own path stays out of git.
+    path = os.environ.get("CORTINO_WAREHOUSE_PATH") or sources["warehouse"]["path"]
     if not path:
-        raise StageError("warehouse.path is not set in config/sources.yaml")
+        raise StageError("warehouse.path is not set in config/sources.yaml (or set CORTINO_WAREHOUSE_PATH)")
     return StageDeps(
-        llm=StrandsLLM(config.load("models"), thresholds),
+        llm=StrandsLLM(config.load(models_config_name()), thresholds),
         catalog=SourceCatalog(DuckDBWarehouse(path, read_only=True), sources["mappings"]),
         chart_map=config.load("chart_map")["chart_map"],
         thresholds=thresholds,
@@ -78,11 +80,19 @@ def _load_plan(path: Path) -> Plan:
     return Plan.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def _log_retries(ctx: RunContext, deps: StageDeps) -> None:
+    """Record each retried model call (a network drop, throttling) in the run's progress log."""
+    deps.llm.on_retry = lambda role, attempt, error, wait: ctx.store.event(
+        ctx.run.id, "llm_retry", role=role, attempt=attempt, wait_s=wait, error=error
+    )
+
+
 def _plan(ctx: RunContext, deps: StageDeps, change_request=None, previous=None) -> Plan:
     """Run the planner with token usage logged to the run; write plan.json and plan.md."""
     deps.llm.on_usage = lambda role, i, o: ctx.store.event(
         ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o
     )
+    _log_retries(ctx, deps)
     spec = load_spec(ctx.path / "spec.json")
     plan = make_plan(
         spec, deps.catalog, deps.llm, deps.chart_map, change_request, previous,
@@ -163,6 +173,7 @@ def default_stages(deps: StageDeps | None = None) -> dict[S, StageFn]:
             ctx.store.event(ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o)
 
         deps.llm.on_usage = on_usage
+        _log_retries(ctx, deps)
         with ThreadPoolExecutor(2) as pool:
             jobs = [pool.submit(fn, plan, spec, tools, deps.llm, fix and fix[owner])
                     for owner, fn in (("data", build_data), ("ui", build_ui))
@@ -224,6 +235,7 @@ def default_stages(deps: StageDeps | None = None) -> dict[S, StageFn]:
         deps.llm.on_usage = lambda role, i, o: ctx.store.event(
             ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o
         )
+        _log_retries(ctx, deps)
         report_file, fix_file = ctx.path / "verify" / "report.json", ctx.path / "fix.json"
         previous = json.loads(report_file.read_text(encoding="utf-8")) if report_file.exists() else None
         if previous and previous["passed"]:  # verifying again after a change request: run every check

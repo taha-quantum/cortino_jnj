@@ -18,6 +18,15 @@
   .state { font-family: monospace; font-size: 12px; color: #57606a; }
   button { margin-right: 8px; }
   .error { color: #cf222e; }
+  #d-plan { max-height: 480px; overflow: auto; border: 1px solid #d0d7de; border-radius: 6px; padding: 4px 12px; }
+  #d-plan h1 { font-size: 18px; } #d-plan h2 { font-size: 15px; margin: 16px 0 6px; } #d-plan h3 { font-size: 14px; margin: 12px 0 4px; }
+  #d-plan table { border-collapse: collapse; font-size: 13px; margin: 4px 0 8px; }
+  #d-plan th, #d-plan td { border: 1px solid #d0d7de; padding: 3px 8px; text-align: left; vertical-align: top; }
+  #d-plan th { background: #f6f8fa; }
+  #d-plan pre { max-height: none; margin: 4px 0 8px; font-size: 12px; }
+  #d-plan code { font-size: 12px; background: #f6f8fa; padding: 0 3px; border-radius: 3px; }
+  #d-plan pre code { padding: 0; background: none; }
+  .gate { font-size: 14px; margin: 4px 0 8px; }
 </style>
 </head>
 <body>
@@ -53,7 +62,8 @@
       <p>State: <span id="d-state" class="state"></span> <span id="d-busy"></span></p>
       <p id="d-msg"></p>
       <h3>Plan</h3>
-      <pre id="d-plan">No plan yet.</pre>
+      <div id="d-plan">No plan yet.</div>
+      <p id="d-gate" class="gate"></p>
       <p><button id="approve" type="button">Approve</button><button id="reject" type="button">Reject</button><button id="resume" type="button">Resume</button></p>
       <div id="preview-gate">
         <h3>Preview</h3>
@@ -84,6 +94,75 @@ function el(tag, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
+
+// Renders the plan's Markdown (headings, tables, fenced code, lists, paragraphs, `code`, **bold**)
+// as DOM nodes. Every piece of text goes in through textContent, so the plan can never inject HTML.
+function inline(parent, text) {
+  const re = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) parent.append(text.slice(last, m.index));
+    parent.append(m[0][0] === "`" ? el("code", m[0].slice(1, -1)) : el("strong", m[0].slice(2, -2)));
+    last = re.lastIndex;
+  }
+  if (last < text.length) parent.append(text.slice(last));
+  return parent;
+}
+
+function cells(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+}
+
+function markdown(src) {
+  const out = document.createDocumentFragment(), lines = src.replace(/\r/g, "").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    const fence = line.match(/^```/);
+    if (fence) {
+      const body = [];
+      for (i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
+      i++;
+      const pre = el("pre"); pre.append(el("code", body.join("\n"))); out.append(pre);
+      continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { out.append(inline(el("h" + h[1].length), h[2])); i++; continue; }
+    if (/^\s*\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+      const t = el("table"), head = el("tr");
+      cells(line).forEach((c) => head.append(inline(el("th"), c)));
+      t.append(head);
+      for (i += 2; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
+        const tr = el("tr");
+        cells(lines[i]).forEach((c) => {
+          const td = el("td");
+          c.split(/<br\s*\/?>/i).forEach((part, k) => { if (k) td.append(el("br")); inline(td, part); });
+          tr.append(td);
+        });
+        t.append(tr);
+      }
+      out.append(t);
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      const ul = el("ul");
+      for (; i < lines.length && /^\s*[-*]\s+/.test(lines[i]); i++) ul.append(inline(el("li"), lines[i].replace(/^\s*[-*]\s+/, "")));
+      out.append(ul);
+      continue;
+    }
+    const para = [];
+    for (; i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*\||\s*[-*]\s)/.test(lines[i]); i++) para.push(lines[i].trim());
+    if (!para.length) { para.push(line.trim()); i++; }  // a line no rule above took
+    out.append(inline(el("p"), para.join(" ")));
+  }
+  return out;
+}
+
+const GATE_TEXT = {
+  AWAITING_PLAN_APPROVAL: ["Gate 1 of 2: review the plan above.", "Approve plan and build"],
+  AWAITING_PREVIEW_APPROVAL: ["Gate 2 of 2: check the preview and the verify results below.", "Approve preview and open PR"],
+};
 
 async function call(method, url, body) {
   const opts = { method, headers: {} };
@@ -116,8 +195,14 @@ async function loadDetail() {
   $("d-title").textContent = d.meta.name || d.id;
   $("d-state").textContent = d.state;
   $("d-busy").textContent = d.busy ? "(working...)" : "";
-  $("d-plan").textContent = d.plan_md === null ? "No plan yet." : d.plan_md;
+  const plan = $("d-plan");
+  if (d.plan_md === null) plan.textContent = "No plan yet.";
+  else if (plan.dataset.src !== d.plan_md) plan.replaceChildren(markdown(d.plan_md));  // keep the scroll position
+  plan.dataset.src = d.plan_md === null ? "" : d.plan_md;
   const atGate = GATES.includes(d.state) && !d.busy;
+  const gate = GATE_TEXT[d.state];
+  $("d-gate").textContent = gate && !d.busy ? gate[0] : "";
+  $("approve").textContent = gate ? gate[1] : "Approve";
   const atPreview = d.state === "AWAITING_PREVIEW_APPROVAL" && !d.busy;
   $("approve").disabled = !atGate;
   $("reject").disabled = !atGate;

@@ -93,6 +93,15 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+def entry() -> int:
+    """The `cortino` console script: loads .env from the repo root (the shell's variables win),
+    then runs the CLI. Tests call main() directly so a developer's .env never leaks into them."""
+    from cortino.config import load_env_file
+
+    load_env_file()
+    return main()
+
+
 def main(argv: list[str] | None = None, trace: bool = True) -> int:
     args = _parser().parse_args(argv)
     if args.command == "serve":

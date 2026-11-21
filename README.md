@@ -13,7 +13,36 @@ uv sync --extra tableau --extra powerbi    # optional: Hyper extracts, Tableau S
 uv run playwright install chromium         # the visual and functional checks drive Chromium
 ```
 
-Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` for real runs.
+Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` for real runs. The `cortino` command loads
+`.env` from the repo root at startup; variables already set in the shell take precedence.
+
+### Claude on Google Cloud Vertex AI
+
+Instead of an Anthropic API key, real runs can call Claude through Vertex AI:
+
+```sh
+uv sync --extra vertex
+gcloud auth application-default login
+```
+
+Enable the Claude models you use in the Vertex AI Model Garden for your project, then set
+`CORTINO_LLM_PROVIDER=vertex`, `CLOUD_ML_REGION` (a region that serves those models, e.g. `us-east5`
+or `global`) and, if it differs from the gcloud default project, `ANTHROPIC_VERTEX_PROJECT_ID`.
+Check the model IDs in `config/models.yaml` against the ones Model Garden lists.
+
+### Gemini on Vertex AI
+
+To run on Gemini instead of Claude:
+
+```sh
+uv sync --extra gemini
+gcloud auth application-default login
+```
+
+Set `CORTINO_LLM_PROVIDER=gemini` and `GOOGLE_CLOUD_PROJECT` (or `ANTHROPIC_VERTEX_PROJECT_ID`). The
+location is `GOOGLE_CLOUD_LOCATION`, else `CLOUD_ML_REGION`, else `global`; most newer Gemini models
+are served only from `global`. The model per role is in `config/models_gemini.yaml`. The prompts were
+written for Claude, so check results more closely on Gemini.
 
 ## Tests (offline)
 
@@ -32,6 +61,35 @@ Anthropic API and run only when `ANTHROPIC_API_KEY` is set (`uv run pytest -m li
 
 ## Running a dashboard
 
+### Web UI (the way to demo it)
+
+```sh
+uv run cortino serve                             # http://localhost:8000
+```
+
+Upload the dashboard file (plus reference screenshots of the original and per-visual expected-value
+CSVs, both strongly recommended), then follow the run on the page: approve or reject the plan at
+gate 1; at gate 2 open the preview, compare it with the original, read the verify results, and
+approve (opens the PR), request changes or reject. The server has no sign-in and listens on
+localhost only. A run takes about 10 minutes, most of it in Verify.
+
+### A local source for demo dashboards (optional)
+
+To build an original dashboard in Power BI Desktop or Tableau Desktop on the sample data, run SQL
+Server in Docker with the same rows as the DuckDB warehouse:
+
+```sh
+uv run python tests/fixtures/sales/make_sqlserver.py          # start (or reuse) and load; --reset recreates
+```
+
+Connect with server `localhost`, database `salesdb`, user `sa`; the password is `MSSQL_SA_PASSWORD`
+in `.env` (generated on the first run if unset). Cortino never connects to this database: it is the
+dashboard's original source, and Cortino reads only the saved dashboard file and rebuilds on the
+DuckDB warehouse. With the server typed as `localhost`, map the tables in `config/sources.yaml` as
+`"localhost.salesdb.dbo.<table>": analytics.<table>`.
+
+### CLI
+
 ```sh
 uv run cortino run Sales.zip --name Sales --target-repo ../platform-repo [--notes "..."] [--ref original.png]
 uv run cortino status [<run-id>]                 # one run, or a table of all runs
@@ -39,7 +97,7 @@ uv run cortino approve <run-id>                  # at the plan gate, then at the
 uv run cortino request-changes <run-id> "make the bar chart a column chart" [--visual barSalesByRegion]
 uv run cortino reject <run-id>
 uv run cortino resume <run-id>                   # continue after a crash or NEEDS_INPUT
-uv run cortino serve                             # the API (stub for now)
+uv run cortino serve                             # the API and web UI above
 ```
 
 Accepted inputs: a zipped PBIP project, `.pbit`, Tableau `.twb`/`.twbx`, or a link in place of the
@@ -53,8 +111,10 @@ Everything a run produces is under `runs/<id>/` (`spec.json`, `plan.md`,
 ## Config to fill
 
 - `config/sources.yaml`: `warehouse.path` (the DuckDB warehouse file) and `mappings` from the
-  original source tables to warehouse tables.
-- `config/models.yaml`: the model per role (`planner`, `builder`, `checker`, `cheap`).
+  original source tables to warehouse tables. `CORTINO_WAREHOUSE_PATH` in `.env` overrides
+  `warehouse.path`, which keeps a machine's own path out of git.
+- `config/models.yaml`: the model per role (`planner`, `builder`, `checker`, `cheap`);
+  `config/models_gemini.yaml` when `CORTINO_LLM_PROVIDER=gemini`.
 - `config/thresholds.yaml`: data tolerance, loop limits, upload limits, budgets.
 - `config/git.yaml`: `git_host: local` (default: writes `pr.md`, no push) or `github` (pushes and
   opens the PR with the `gh` CLI); `base_branch`.

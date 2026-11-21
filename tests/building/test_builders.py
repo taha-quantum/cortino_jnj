@@ -3,7 +3,7 @@ import json
 import pytest
 
 from cortino.building import BuildError
-from cortino.building.data_builder import build_data
+from cortino.building.data_builder import build_data, with_default_order
 from cortino.building.datasets import register_datasets
 from cortino.building.ui_builder import build_ui, ui_skipped
 from cortino.checking import Finding
@@ -44,8 +44,10 @@ def test_data_builder_writes_views_and_datasets(tmp_path, spec, plan):
     assert sorted(paths) == sorted([base / "views.sql"] + [base / "datasets" / f"{d.id}.sql" for d in plan.datasets])
     views = (base / "views.sql").read_text(encoding="utf-8")
     assert views == "CREATE OR REPLACE VIEW analytics_sales_v AS\nSELECT * FROM analytics.sales;\n"
-    for d in plan.datasets:
-        assert (base / "datasets" / f"{d.id}.sql").read_text(encoding="utf-8") == d.sql
+    visuals = {v.id: v for p in spec.pages for v in p.visuals}
+    for d in plan.datasets:  # the plan's SQL, with a stable row order added
+        want = with_default_order(d.sql, visuals[d.visual_ids[0]], spec.source_format)
+        assert (base / "datasets" / f"{d.id}.sql").read_text(encoding="utf-8") == want
     assert all(f.startswith("dashboards/sales/") for f in _files(tmp_path))
 
 
@@ -62,7 +64,10 @@ def test_data_fix_asks_llm_and_validates_reply(tmp_path, spec, plan):
     assert "column nope not found" in llm.calls[0]["prompt"]
     assert plan.datasets[0].sql in llm.calls[0]["prompt"]  # current file contents
     assert "single SELECT" in llm.calls[1]["prompt"]
-    assert tools.read_file("dashboards/sales/datasets/sales_by_region.sql") == fixed["sales_by_region"]
+    region = next(v for p in spec.pages for v in p.visuals if v.id == "barSalesByRegion")
+    want = with_default_order(fixed["sales_by_region"], region, spec.source_format)
+    assert tools.read_file("dashboards/sales/datasets/sales_by_region.sql") == want
+    assert want.rstrip().endswith("ORDER BY 2 DESC, 1")  # the fixer's reply is ordered too
     llm = FakeLLM({"builder": [{"views_sql": "", "datasets": unbound}] * 2})
     with pytest.raises(BuildError, match="region"):
         build_data(plan, spec, tools, llm, [data_finding()])
