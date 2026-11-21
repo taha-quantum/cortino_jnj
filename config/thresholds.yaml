@@ -10,5 +10,7 @@ auto_approve_plan_when_all_high_confidence: false
 high_confidence: 0.85
 agent_token_budget: 200000
 agent_time_budget_s: 600
+llm_retries: 3            # extra tries for a model call that failed on a network drop, throttling or a 5xx
+llm_retry_backoff_s: 2     # wait before retry n: backoff * 2^(n-1) seconds (2, 4, 8)
 visual_score_min: 0.7
 preview_ttl_hours: 8

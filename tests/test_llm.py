@@ -237,3 +237,112 @@ def test_strands_live_structured():
     llm = StrandsLLM(load(models_config_name()), load("thresholds"))
     out = llm.structured("cheap", "Answer tersely.", "Plan: title 'x', 3 steps.", Plan)
     assert out.steps == 3
+
+
+class _Usage:
+    def __init__(self):
+        self.accumulated_usage = {"inputTokens": 3, "outputTokens": 4}
+
+
+class _Result:
+    metrics = _Usage()
+
+    def __str__(self):
+        return "ok"
+
+
+def _scripted_agent(monkeypatch, outcomes):
+    """Patch strands.Agent so each agent call takes the next outcome: an exception or a result."""
+    import strands
+
+    made = []
+
+    class Agent:
+        def __init__(self, **kw):
+            made.append(kw)
+
+        def __call__(self, content):
+            out = outcomes.pop(0)
+            if isinstance(out, BaseException):
+                raise out
+            return out
+
+    monkeypatch.setattr(strands, "Agent", Agent)
+    return made
+
+
+def _retrying_llm(monkeypatch, retries=3):
+    monkeypatch.setenv("CORTINO_LLM_PROVIDER", "gemini")
+    llm = StrandsLLM({"checker": "m"}, {"llm_retries": retries, "llm_retry_backoff_s": 2})
+    llm._make_model = lambda provider, model_id: object()
+    llm.slept = []
+    llm._sleep = llm.slept.append
+    llm.retries = []
+    llm.on_retry = lambda role, attempt, error, wait: llm.retries.append((role, attempt, wait))
+    return llm
+
+
+def _dns_error():
+    """Shaped like the real failure: requests ConnectionError caused by a NameResolutionError."""
+    import requests
+
+    try:
+        try:
+            raise OSError("[Errno 11004] getaddrinfo failed")
+        except OSError as inner:
+            raise requests.exceptions.ConnectionError(
+                "HTTPSConnectionPool(host='oauth2.googleapis.com', port=443): Max retries exceeded"
+            ) from inner
+    except requests.exceptions.ConnectionError as e:
+        return e
+
+
+class _Status(Exception):
+    def __init__(self, code):
+        super().__init__(f"status {code}")
+        self.status_code = code
+
+
+@pytest.mark.parametrize(
+    ("error", "transient"),
+    [
+        (_dns_error(), True),
+        (TimeoutError("read timed out"), True),
+        (_Status(429), True),
+        (_Status(503), True),
+        (RuntimeError("429 RESOURCE_EXHAUSTED: quota"), True),
+        (_Status(400), False),
+        (_Status(401), False),
+        (ValueError("model 'gemini-x' not found"), False),
+        (RuntimeError("invalid argument"), False),
+    ],
+)
+def test_is_transient(error, transient):
+    from cortino.llm import is_transient
+
+    assert is_transient(error) is transient
+
+
+def test_network_drop_is_retried_then_succeeds(monkeypatch):
+    llm = _retrying_llm(monkeypatch)
+    made = _scripted_agent(monkeypatch, [_dns_error(), _Status(503), _Result()])
+    assert llm.text("checker", "s", "p") == "ok"
+    assert llm.slept == [2, 4]  # exponential backoff
+    assert [(r, a) for r, a, _ in llm.retries] == [("checker", 1), ("checker", 2)]
+    assert len(made) == 3  # a fresh agent for every try
+
+
+def test_retries_run_out_with_a_clear_error(monkeypatch):
+    llm = _retrying_llm(monkeypatch, retries=2)
+    _scripted_agent(monkeypatch, [_dns_error(), _dns_error(), _dns_error()])
+    with pytest.raises(LLMError, match=r"checker: model call failed \(after 3 attempts\)"):
+        llm.text("checker", "s", "p")
+    assert llm.slept == [2, 4]
+
+
+def test_permanent_errors_are_not_retried(monkeypatch):
+    llm = _retrying_llm(monkeypatch)
+    _scripted_agent(monkeypatch, [_Status(400), _Result()])
+    with pytest.raises(LLMError, match="checker: model call failed: status 400"):
+        llm.text("checker", "s", "p")
+    assert llm.slept == [] and llm.retries == []

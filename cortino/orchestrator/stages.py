@@ -80,11 +80,19 @@ def _load_plan(path: Path) -> Plan:
     return Plan.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def _log_retries(ctx: RunContext, deps: StageDeps) -> None:
+    """Record each retried model call (a network drop, throttling) in the run's progress log."""
+    deps.llm.on_retry = lambda role, attempt, error, wait: ctx.store.event(
+        ctx.run.id, "llm_retry", role=role, attempt=attempt, wait_s=wait, error=error
+    )
+
+
 def _plan(ctx: RunContext, deps: StageDeps, change_request=None, previous=None) -> Plan:
     """Run the planner with token usage logged to the run; write plan.json and plan.md."""
     deps.llm.on_usage = lambda role, i, o: ctx.store.event(
         ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o
     )
+    _log_retries(ctx, deps)
     spec = load_spec(ctx.path / "spec.json")
     plan = make_plan(
         spec, deps.catalog, deps.llm, deps.chart_map, change_request, previous,
@@ -165,6 +173,7 @@ def default_stages(deps: StageDeps | None = None) -> dict[S, StageFn]:
             ctx.store.event(ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o)
 
         deps.llm.on_usage = on_usage
+        _log_retries(ctx, deps)
         with ThreadPoolExecutor(2) as pool:
             jobs = [pool.submit(fn, plan, spec, tools, deps.llm, fix and fix[owner])
                     for owner, fn in (("data", build_data), ("ui", build_ui))
@@ -226,6 +235,7 @@ def default_stages(deps: StageDeps | None = None) -> dict[S, StageFn]:
         deps.llm.on_usage = lambda role, i, o: ctx.store.event(
             ctx.run.id, "llm_usage", role=role, input_tokens=i, output_tokens=o
         )
+        _log_retries(ctx, deps)
         report_file, fix_file = ctx.path / "verify" / "report.json", ctx.path / "fix.json"
         previous = json.loads(report_file.read_text(encoding="utf-8")) if report_file.exists() else None
         if previous and previous["passed"]:  # verifying again after a change request: run every check

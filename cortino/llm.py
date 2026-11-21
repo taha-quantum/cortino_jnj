@@ -57,6 +57,9 @@ class _Base:
     ):
         self.budgets = budgets or {}
         self.on_usage = on_usage
+        # Called before each retry of a temporary failure: (role, attempt, error, wait seconds).
+        self.on_retry: Callable[[str, int, str, float], None] | None = None
+        self._sleep = time.sleep
 
     def _complete(
         self, role: str, system: str, prompt: str, tools: list | None, images: list[Path] | None
@@ -136,6 +139,41 @@ class FakeLLM(_Base):
         if isinstance(reply, FakeReply):
             return reply
         return FakeReply(reply if isinstance(reply, str) else json.dumps(reply))
+
+
+_TRANSIENT_STATUS = {408, 429, 500, 502, 503, 504, 529}
+# Exception class names (anywhere in the class hierarchy) that mean "try again": network and DNS
+# failures, timeouts, throttling and overloaded or unavailable servers, across the Anthropic,
+# Google and Strands SDKs and requests/httpx/google-auth underneath them.
+_TRANSIENT_NAMES = (
+    "connection", "timeout", "timedout", "nameresolution", "transporterror", "throttl",
+    "ratelimit", "serviceunavailable", "internalserver", "overloaded", "resourceexhausted",
+)
+# The same in error text, for SDKs that re-raise only the message.
+_TRANSIENT_TEXT = (
+    "max retries exceeded", "nameresolutionerror", "getaddrinfo", "temporary failure in name resolution",
+    "timed out", "connection reset", "connection aborted", "connection refused", "resource_exhausted",
+    "rate limit", "overloaded", "service unavailable", "503 unavailable", "502 bad gateway",
+)
+
+
+def is_transient(error: BaseException) -> bool:
+    """Whether a failed model call is worth retrying, judged across the whole cause chain. Bad
+    requests, authentication and unknown models are not; a retry cannot change their answer."""
+    seen, cur = set(), error
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        names = [c.__name__.lower() for c in type(cur).__mro__]
+        if any(t in n for n in names for t in _TRANSIENT_NAMES):
+            return True
+        for attr in ("status_code", "code", "status"):
+            code = getattr(cur, attr, None)
+            if isinstance(code, int) and code in _TRANSIENT_STATUS:
+                return True
+        if any(t in str(cur).lower() for t in _TRANSIENT_TEXT):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 PROVIDERS = ("anthropic", "vertex", "gemini")
@@ -238,10 +276,6 @@ class StrandsLLM(_Base):
                 raise LLMError(f"{role}: could not set up model {model_id!r}: {type(e).__name__}") from e
             # Google SDK messages (e.g. no CLOUD_ML_REGION) carry no secrets and say what is missing
             raise LLMError(f"{role}: could not set up {provider} model {model_id!r}: {e}") from e
-        try:
-            agent = Agent(model=model, system_prompt=system, tools=tools or [], callback_handler=None)
-        except Exception as e:
-            raise LLMError(f"{role}: could not set up model {model_id!r}: {type(e).__name__}") from e
         content = prompt
         if images:
             content = [{"text": prompt}] + [
@@ -249,9 +283,24 @@ class StrandsLLM(_Base):
                            "source": {"bytes": p.read_bytes()}}}
                 for p in images
             ]
-        try:
-            result = agent(content)
-        except Exception as e:
-            raise LLMError(f"{role}: model call failed: {e}") from e
+        retries = int(self.budgets.get("llm_retries", 3))
+        backoff = float(self.budgets.get("llm_retry_backoff_s", 2))
+        for attempt in range(retries + 1):
+            try:  # a fresh agent each try: a failed call can leave half a turn in the agent's history
+                agent = Agent(model=model, system_prompt=system, tools=tools or [], callback_handler=None)
+            except Exception as e:
+                raise LLMError(f"{role}: could not set up model {model_id!r}: {type(e).__name__}") from e
+            try:
+                result = agent(content)
+                break
+            except Exception as e:
+                if attempt < retries and is_transient(e):
+                    wait = backoff * 2**attempt
+                    if self.on_retry:
+                        self.on_retry(role, attempt + 1, f"{type(e).__name__}: {e}"[:300], wait)
+                    self._sleep(wait)
+                    continue
+                tried = f" (after {attempt + 1} attempts)" if attempt else ""
+                raise LLMError(f"{role}: model call failed{tried}: {e}") from e
         usage = result.metrics.accumulated_usage
         return FakeReply(str(result), usage["inputTokens"], usage["outputTokens"])
