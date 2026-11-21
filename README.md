@@ -73,6 +73,21 @@ gate 1; at gate 2 open the preview, compare it with the original, read the verif
 approve (opens the PR), request changes or reject. The server has no sign-in and listens on
 localhost only. A run takes about 10 minutes, most of it in Verify.
 
+### A local source for demo dashboards (optional)
+
+To build an original dashboard in Power BI Desktop or Tableau Desktop on the sample data, run SQL
+Server in Docker with the same rows as the DuckDB warehouse:
+
+```sh
+uv run python tests/fixtures/sales/make_sqlserver.py          # start (or reuse) and load; --reset recreates
+```
+
+Connect with server `localhost`, database `salesdb`, user `sa`; the password is `MSSQL_SA_PASSWORD`
+in `.env` (generated on the first run if unset). Cortino never connects to this database: it is the
+dashboard's original source, and Cortino reads only the saved dashboard file and rebuilds on the
+DuckDB warehouse. With the server typed as `localhost`, map the tables in `config/sources.yaml` as
+`"localhost.salesdb.dbo.<table>": analytics.<table>`.
+
 ### CLI
 
 ```sh
